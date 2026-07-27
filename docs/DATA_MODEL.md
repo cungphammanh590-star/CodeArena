@@ -109,12 +109,16 @@
 | `GET /health` | 含 `server`（应为 `fastapi`）、`port`、`kg_imported`、`coach_available` |
 | `GET /coach` | 陪练 Web 页 |
 | `POST /submit` | **仅入库**；响应不含 prepare/LLM 字段 |
-| `POST /api/coach/prepare` | 入库后独立调用：按 `submission_id` 或显式 `problem_id` 最新提交，原子创建/复用模板会话；不调用 LLM |
-| `POST /api/coach/stream` | SSE 多轮续聊（`session_id` + `message`）；首条用户消息才首次调用模型，LangGraph 负责路由/token/checkpoint/结束/fallback |
+| `POST /api/coach/prepare` | 按 `submission_id` / `problem_id`，或 `mode=daily_review|recommend`（无 submission）；不调用 LLM |
+| `POST /api/coach/stream` | SSE；`action` 可含 `daily_review` / `recommend`（跳过意图分类直达子图） |
 | `GET /api/coach/session` | 按 `submission_id` 取最近 prepare 会话（只读） |
 | `GET /api/coach/hint` | 按 `problem_id` / `slug` 模板建议（扩展弹窗，只读） |
 | `POST /api/coach/engage` | 兼容入口：不得绕过无 LLM prepare 契约 |
 | `POST /api/coach/chat` | 兼容：同步整段回复（CLI）；Web 优先 `stream` |
+
+### 陪练用户画像（只读聚合，非物化表）
+
+`build_user_profile` 在 prepare/stream 时从 `problem_stats` / `problem_daily_stats` / `submissions` 聚合：`weak_tags`、难度分布、近几次尝试、今日摘要。结果注入 `CoachState.user_profile`，不落新事实表。推荐选题亦只读这些问题表。
 
 ## CLI
 

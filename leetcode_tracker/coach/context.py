@@ -158,6 +158,7 @@ def build_coach_context(
     status = str(sub["status"])
     tags_text = _format_tags(sub.get("tags"))
     code_snippet = _code_snippet(sub.get("code"))
+    full_code = str(sub.get("code") or "")
     status_flow = _status_flow(conn, resolved_problem_id)
     status_hint = _STATUS_HINTS.get(status, "")
     runtime = _format_runtime(sub.get("runtime_ms"))
@@ -196,4 +197,6 @@ def build_coach_context(
         "markdown": markdown,
         "placement": placement,
         "today_count": today_count,
+        "current_code": full_code,
+        "language": str(language),
     }

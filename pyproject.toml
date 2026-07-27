@@ -30,4 +30,8 @@ leetcode-tracker = "leetcode_tracker.cli:main"
 include = ["leetcode_tracker*"]
 
 [tool.setuptools.package-data]
-leetcode_tracker = ["static/*", "data/algorithm_stone/**/*"]
+leetcode_tracker = [
+    "static/*",
+    "data/algorithm_stone/**/*",
+    "coach/data/*",
+]

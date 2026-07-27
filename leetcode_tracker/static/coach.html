@@ -68,6 +68,20 @@
       color: #134e4a;
       align-self: end;
     }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .actions button.secondary {
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    .actions button.secondary:disabled {
+      opacity: 0.4;
+    }
     .composer {
       display: flex;
       gap: 8px;
@@ -96,17 +110,25 @@
 <body>
   <header>
     <h1>刷题陪练</h1>
-    <p class="sub">苏格拉底式短对话 · 不泄题 · 数据仅在本机 · SSE 续聊</p>
+    <p class="sub">双图陪练 · 检测在图内、出口在 UI · 数据仅在本机</p>
   </header>
   <main>
     <div id="banner" class="banner"></div>
     <div id="chat" class="chat"></div>
+    <div class="actions" id="actions">
+      <button type="button" class="secondary" id="btn-close" disabled>结束本轮</button>
+      <button type="button" class="secondary" id="btn-review" disabled>今日总结</button>
+      <button type="button" class="secondary" id="btn-recommend" disabled>推荐下一题</button>
+      <button type="button" class="secondary" id="btn-skeleton" disabled>看思路</button>
+      <button type="button" class="secondary" id="btn-diagnose" disabled>结束并诊断</button>
+      <button type="button" class="secondary" id="btn-deep" disabled>查看精析</button>
+    </div>
     <div class="composer">
       <input id="input" type="text" placeholder="说说你的怀疑点…" disabled />
       <button id="send" type="button" disabled>发送</button>
     </div>
     <p class="sub" style="margin-top:12px">
-      <a href="/">返回仪表盘</a> · 输入「结束」可收束对话
+      <a href="/">返回仪表盘</a> · 也可输入「结束」收束
     </p>
   </main>
   <script>
@@ -114,13 +136,23 @@
     const inputEl = document.getElementById("input");
     const sendBtn = document.getElementById("send");
     const bannerEl = document.getElementById("banner");
+    const btnClose = document.getElementById("btn-close");
+    const btnReview = document.getElementById("btn-review");
+    const btnRecommend = document.getElementById("btn-recommend");
+    const btnSkeleton = document.getElementById("btn-skeleton");
+    const btnDiagnose = document.getElementById("btn-diagnose");
+    const btnDeep = document.getElementById("btn-deep");
 
     const params = new URLSearchParams(location.search);
     const submission = params.get("submission");
     const problemId = params.get("problem_id");
+    const modeParam = params.get("mode") || "";
+    const actionParam = params.get("action") || "";
     let sessionId = params.get("session");
     let busy = false;
     let preparePromise = null;
+    let graphMode = "local"; // local | api
+    let exitOffered = false;
 
     function addMsg(text, role) {
       const div = document.createElement("div");
@@ -141,10 +173,36 @@
       bannerEl.style.display = "none";
     }
 
+    function syncActionButtons() {
+      const ready = Boolean(sessionId) && !busy;
+      btnClose.disabled = !ready;
+      btnReview.disabled = !ready;
+      btnRecommend.disabled = !ready;
+      if (graphMode === "api") {
+        btnSkeleton.disabled = true;
+        btnDiagnose.disabled = !ready;
+        btnDeep.disabled = !ready;
+      } else {
+        btnDiagnose.disabled = true;
+        btnDeep.disabled = true;
+        btnSkeleton.disabled = !ready;
+        if (!exitOffered && ready) {
+          btnSkeleton.title = "随时可看思路；失稳后会高亮提示";
+        }
+      }
+    }
+
     function enableComposer() {
       inputEl.disabled = false;
       sendBtn.disabled = false;
+      syncActionButtons();
       inputEl.focus();
+    }
+
+    function disableComposer() {
+      inputEl.disabled = true;
+      sendBtn.disabled = true;
+      syncActionButtons();
     }
 
     async function loadCachedSession(submissionId, pid) {
@@ -156,17 +214,19 @@
       return res.json();
     }
 
-    async function prepare(submissionId, pid) {
+    async function prepare(submissionId, pid, mode) {
       if (preparePromise) return preparePromise;
       preparePromise = (async () => {
         showBanner("正在创建本地陪练会话…");
+        const body = {
+          submission_id: submissionId || "",
+          problem_id: pid ? Number(pid) : null,
+        };
+        if (mode) body.mode = mode;
         const res = await fetch("/api/coach/prepare", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            submission_id: submissionId || "",
-            problem_id: pid ? Number(pid) : null,
-          }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "prepare failed");
@@ -179,6 +239,18 @@
       }
     }
 
+    async function startWithMode(mode) {
+      const data = await prepare("", null, mode);
+      sessionId = data.session_id;
+      addMsg(data.opening, "coach");
+      hideBanner();
+      enableComposer();
+      const bootAction = actionParam || mode;
+      if (bootAction === "daily_review" || bootAction === "recommend") {
+        await sendPayload({ action: bootAction });
+      }
+    }
+
     async function startWithSubmission(submissionId, pid) {
       let data = await loadCachedSession(submissionId, pid);
       if (data && data.session_id) {
@@ -188,7 +260,7 @@
         enableComposer();
         return;
       }
-      data = await prepare(submissionId, pid);
+      data = await prepare(submissionId, pid, "");
       sessionId = data.session_id;
       addMsg(data.opening, "coach");
       if (data.fallback_used) {
@@ -198,7 +270,8 @@
           " 启动陪练。"
         );
       } else if (data.opening_source === "template") {
-        showBanner("已用本地模板启动；发送消息时才会调用 Ollama。");
+        const modeHint = graphMode === "api" ? "DeepSeek" : "本地模型";
+        showBanner("已用本地模板启动；发送消息时才会调用 " + modeHint + "。");
       } else {
         hideBanner();
       }
@@ -238,18 +311,35 @@
           try {
             onEvent(event, JSON.parse(dataLine));
           } catch (_e) {
-            /* ignore malformed chunk */
+            /* ignore */
           }
         }
       }
     }
 
-    async function sendMessage() {
-      const text = inputEl.value.trim();
-      if (!text || !sessionId || busy) return;
+    async function sendPayload({ text, action }) {
+      if (!sessionId || busy) return;
+      const hasAction = Boolean(action);
+      const hasText = Boolean(text && text.trim());
+      if (!hasAction && !hasText) return;
+
       busy = true;
+      syncActionButtons();
       sendBtn.disabled = true;
-      addMsg(text, "user");
+
+      if (hasText) addMsg(text.trim(), "user");
+      else if (hasAction) {
+        const label = {
+          close: "结束本轮",
+          show_skeleton: "看思路",
+          diagnose: "结束并诊断",
+          deep_analysis: "查看精析",
+          daily_review: "今日总结",
+          recommend: "推荐下一题",
+          optimize: "优化分析",
+        }[action] || action;
+        addMsg("〔" + label + "〕", "user");
+      }
       inputEl.value = "";
       const coachDiv = addMsg("", "coach");
       try {
@@ -259,45 +349,61 @@
             "Content-Type": "application/json",
             Accept: "text/event-stream",
           },
-          body: JSON.stringify({ session_id: sessionId, message: text }),
+          body: JSON.stringify({
+            session_id: sessionId,
+            message: hasText ? text.trim() : "",
+            action: action || "",
+          }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           showBanner(data.message || "发送失败");
           coachDiv.remove();
           if (data.reopen_required || data.code === "session_abandoned") {
-            inputEl.disabled = true;
-            sendBtn.disabled = true;
+            disableComposer();
             sessionId = "";
           }
           return;
         }
         let finished = false;
         await readSse(res, (event, data) => {
-          if (event === "token" || data.type === "token") {
-            coachDiv.textContent += data.text || "";
-            chatEl.scrollTop = chatEl.scrollHeight;
+          if (event === "ready" || data.type === "ready") {
+            if (data.graph) graphMode = data.graph;
+            syncActionButtons();
+          } else if (
+            event === "token" ||
+            data.type === "token" ||
+            event === "answer_egress" ||
+            data.type === "answer_egress" ||
+            event === "diagnose" ||
+            data.type === "diagnose" ||
+            event === "deep_analysis" ||
+            data.type === "deep_analysis"
+          ) {
+            if (data.text) {
+              coachDiv.textContent += data.text;
+              chatEl.scrollTop = chatEl.scrollHeight;
+            }
+          } else if (event === "offer_exit" || data.type === "offer_exit") {
+            exitOffered = true;
+            showBanner(data.message || "可以结束或看思路了");
+            syncActionButtons();
           } else if (event === "fallback" || data.type === "fallback") {
             coachDiv.textContent += data.text || "";
-            showBanner(data.message || "模型不可用，已切换本地降级陪练。");
+            showBanner(data.message || "模型不可用，已降级。");
             if (data.reopen_required || data.session_abandoned) {
-              inputEl.disabled = true;
-              sendBtn.disabled = true;
+              disableComposer();
               sessionId = "";
             }
           } else if (event === "error" || data.type === "error") {
             showBanner(data.message || "对话出错");
             if (data.reopen_required || data.code === "session_abandoned") {
-              inputEl.disabled = true;
-              sendBtn.disabled = true;
+              disableComposer();
               sessionId = "";
             }
           } else if (event === "done" || data.type === "done") {
             finished = true;
-            if (data.done) {
-              inputEl.disabled = true;
-              sendBtn.disabled = true;
-            }
+            if (data.done) disableComposer();
           }
         });
         if (!coachDiv.textContent) {
@@ -308,20 +414,42 @@
         showBanner(err.message || "发送失败");
       } finally {
         busy = false;
-        if (!inputEl.disabled) sendBtn.disabled = false;
+        if (!inputEl.disabled) {
+          sendBtn.disabled = false;
+          syncActionButtons();
+        }
       }
+    }
+
+    function sendMessage() {
+      return sendPayload({ text: inputEl.value, action: "" });
     }
 
     sendBtn.addEventListener("click", sendMessage);
     inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") sendMessage();
     });
+    btnClose.addEventListener("click", () => sendPayload({ action: "close" }));
+    btnReview.addEventListener("click", () => sendPayload({ action: "daily_review" }));
+    btnRecommend.addEventListener("click", () => sendPayload({ action: "recommend" }));
+    btnSkeleton.addEventListener("click", () => sendPayload({ action: "show_skeleton" }));
+    btnDiagnose.addEventListener("click", () => sendPayload({ action: "diagnose" }));
+    btnDeep.addEventListener("click", () => sendPayload({ action: "deep_analysis" }));
 
     (async function init() {
       try {
         const health = await fetch("/health").then((r) => r.json());
         if (!health.coach_available) {
           showBanner("未安装陪练依赖：pip install 'leetcode-tracker[coach]'");
+          return;
+        }
+        graphMode = health.llm_provider === "api" ? "api" : "local";
+        const profileMode =
+          modeParam === "daily_review" || modeParam === "recommend"
+            ? modeParam
+            : "";
+        if (profileMode) {
+          await startWithMode(profileMode);
           return;
         }
         if (!health.kg_imported) {
@@ -341,7 +469,7 @@
           await loadHint(problemId);
           return;
         }
-        showBanner("缺少 submission 或 problem_id 参数");
+        showBanner("缺少 submission、problem_id 或 mode 参数");
       } catch (err) {
         showBanner("本机服务不可用，请先运行 leetcode-tracker serve");
       }

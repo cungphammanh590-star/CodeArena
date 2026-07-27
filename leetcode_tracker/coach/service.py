@@ -1,63 +1,32 @@
-"""陪练会话服务：模板即时启动，LangGraph 管理多轮状态。"""
+"""陪练会话服务：模板即时启动，按 provider 分流 LocalGraph / ApiGraph。"""
 
 from __future__ import annotations
 
 import sqlite3
 import threading
 from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Any, Optional
 
-from langgraph.graph import MessagesState
-
 from leetcode_tracker.coach.context import build_coach_context
-from leetcode_tracker.coach.debug_log import log_llm_turn
-from leetcode_tracker.coach.guardrail import apply_code_block_guardrail
+from leetcode_tracker.coach.graphs import graph_for_provider
+from leetcode_tracker.coach.graphs.common import GenerationCancelled
 from leetcode_tracker.coach.opening import template_opening
-from leetcode_tracker.coach.prompts import system_prompt_for_status
+from leetcode_tracker.coach.profile import build_user_profile
 from leetcode_tracker.coach.sessions import (
-    abandon_session,
     get_or_create_session,
     get_session,
     is_session_abandoned,
     touch_session,
 )
-from leetcode_tracker.infra.config import switch_to_ollama_keep_key
-from leetcode_tracker.infra.db import init_db as _init_db_for_failover
-from leetcode_tracker.infra.paths import db_path
-from leetcode_tracker.llm.provider import build_chat_model, get_llm_settings
+from leetcode_tracker.coach.state import ACTIONS
+from leetcode_tracker.core.submissions import get_submission_by_id
+from leetcode_tracker.infra.timeutil import china_today
+from leetcode_tracker.llm.provider import get_llm_settings
 
-_END_PHRASES = ("结束", "够了", "先这样", "不用了", "谢谢")
 _SESSION_LOCKS: dict[str, threading.Lock] = {}
 _SESSION_LOCKS_GUARD = threading.Lock()
 
-
-class CoachState(MessagesState):
-    context_markdown: str
-    submission_status: str
-    done: bool
-    fallback_turn_count: int
-    generation_error: str
-    provider_failover: bool
-
-
-class GenerationCancelled(Exception):
-    """客户端断开后停止消费模型流。"""
-
-
-def _is_done_message(text: str) -> bool:
-    t = text.strip().lower()
-    return any(p in t for p in _END_PHRASES)
-
-
-def _fallback_reply(turn: int) -> str:
-    replies = (
-        "模型暂时不可用，我们先不看答案。你能说出这次最小的失败用例，以及实际结果和预期结果分别是什么吗？",
-        "先沿着你的思路排查：你认为哪个不变量应该始终成立？请挑一次循环或一次递归调用验证它。",
-        "把问题再缩小一点：边界、状态转移和数据范围中，你现在最不确定哪一项？",
-        "暂时不用改代码。请先用一句话说明当前做法为什么应该成立，再找一个能推翻这句话的输入。",
-    )
-    return replies[max(0, turn) % len(replies)]
+PROFILE_MODES = frozenset({"daily_review", "recommend"})
 
 
 def _session_lock(session_id: str) -> threading.Lock:
@@ -75,214 +44,6 @@ def release_session(session_id: str) -> None:
         lock.release()
 
 
-@contextmanager
-def _graph_for_turn(
-    cancel_event: threading.Event,
-    *,
-    session_id: str,
-    thread_id: str,
-):
-    from langchain_core.messages import AIMessage, SystemMessage
-    from langgraph.checkpoint.sqlite import SqliteSaver
-    from langgraph.config import get_stream_writer
-    from langgraph.graph import END, START, StateGraph
-
-    def route_turn(state: CoachState) -> str:
-        if bool(state.get("done")):
-            return "close_session"
-        messages = list(state.get("messages") or [])
-        last = messages[-1] if messages else None
-        content = str(getattr(last, "content", "") or "")
-        return "close_session" if _is_done_message(content) else "coach_reply"
-
-    def close_session(_state: CoachState) -> dict[str, Any]:
-        summary = (
-            "好的，今天先到这里。记得把刚才怀疑的点记下来，"
-            "下次提交前再对一遍。"
-        )
-        get_stream_writer()({"type": "token", "text": summary})
-        return {"messages": [AIMessage(content=summary)], "done": True}
-
-    def coach_reply(state: CoachState) -> dict[str, Any]:
-        writer = get_stream_writer()
-        status = str(state.get("submission_status") or "")
-        prompt = system_prompt_for_status(status)
-        context_markdown = str(state.get("context_markdown") or "")
-        system = SystemMessage(
-            content=f"{prompt}\n\n## 陪练上下文\n{context_markdown}"
-        )
-        outbound = [system, *list(state.get("messages") or [])]
-        accumulated = ""
-        fallback_turn = int(state.get("fallback_turn_count") or 0)
-        try:
-            model = build_chat_model()
-            for chunk in model.stream(outbound):
-                if cancel_event.is_set():
-                    raise GenerationCancelled()
-                piece = getattr(chunk, "content", None)
-                if not piece:
-                    continue
-                text = piece if isinstance(piece, str) else str(piece)
-                if not text:
-                    continue
-                accumulated += text
-            if not accumulated:
-                raise RuntimeError("模型未返回内容")
-            # 先攒齐再过软护栏，再推 SSE，避免代码块先流到用户
-            reply, stripped = apply_code_block_guardrail(accumulated)
-            writer({"type": "token", "text": reply})
-            log_llm_turn(
-                session_id=session_id,
-                thread_id=thread_id,
-                messages=outbound,
-                reply=reply,
-                meta={
-                    "node": "coach_reply",
-                    "fallback_turn": fallback_turn,
-                    "submission_status": status,
-                    "prompt_mode": "ac" if status == "Accepted" else "debug",
-                    "stripped": stripped,
-                },
-            )
-            return {
-                "messages": [AIMessage(content=reply)],
-                "done": False,
-                "fallback_turn_count": fallback_turn,
-                "generation_error": "",
-                "provider_failover": False,
-            }
-        except GenerationCancelled:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            was_api = get_llm_settings().get("provider") == "api"
-            log_llm_turn(
-                session_id=session_id,
-                thread_id=thread_id,
-                messages=outbound,
-                error=str(exc),
-                meta={
-                    "node": "coach_reply",
-                    "fallback_turn": fallback_turn,
-                    "submission_status": status,
-                    "prompt_mode": "ac" if status == "Accepted" else "debug",
-                    "provider_failover": was_api,
-                },
-            )
-            return {
-                "done": False,
-                "fallback_turn_count": fallback_turn,
-                "generation_error": str(exc),
-                "provider_failover": was_api,
-            }
-
-    def route_after_reply(state: CoachState) -> str:
-        return "fallback_reply" if state.get("generation_error") else "__end__"
-
-    def fallback_reply(state: CoachState) -> dict[str, Any]:
-        fallback_turn = int(state.get("fallback_turn_count") or 0)
-        err = str(state.get("generation_error") or "unknown error")
-        failover = bool(state.get("provider_failover"))
-
-        if failover:
-            switch_to_ollama_keep_key()
-            failover_conn = _init_db_for_failover()
-            try:
-                abandon_session(failover_conn, session_id)
-            finally:
-                failover_conn.close()
-            reply = (
-                "DeepSeek 暂时不可达"
-                + (f"（{err}）" if err else "")
-                + "。已将设置切回本地 Ollama（API Key 仍保留）。"
-                "本对话已结束，请关闭本页后重新打开陪练再继续。"
-            )
-            log_llm_turn(
-                session_id=session_id,
-                thread_id=thread_id,
-                messages=list(state.get("messages") or []),
-                reply=reply,
-                error=err,
-                meta={
-                    "node": "fallback_reply",
-                    "provider_failover": True,
-                    "session_abandoned": True,
-                },
-            )
-            get_stream_writer()(
-                {
-                    "type": "fallback",
-                    "text": reply,
-                    "message": "DeepSeek 不可达，已切回本地 Ollama；请重新打开陪练。",
-                    "reopen_required": True,
-                    "session_abandoned": True,
-                }
-            )
-            return {
-                "messages": [AIMessage(content=reply)],
-                "done": True,
-                "fallback_turn_count": fallback_turn + 1,
-                "generation_error": "",
-                "provider_failover": False,
-            }
-
-        reply = _fallback_reply(fallback_turn)
-        log_llm_turn(
-            session_id=session_id,
-            thread_id=thread_id,
-            messages=list(state.get("messages") or []),
-            reply=reply,
-            error=err,
-            meta={"node": "fallback_reply", "fallback_turn": fallback_turn},
-        )
-        get_stream_writer()(
-            {
-                "type": "fallback",
-                "text": reply,
-                "message": f"模型不可用，已切换本地降级陪练：{err}",
-            }
-        )
-        return {
-            "messages": [AIMessage(content=reply)],
-            "done": False,
-            "fallback_turn_count": fallback_turn + 1,
-            "generation_error": "",
-            "provider_failover": False,
-        }
-
-    builder = StateGraph(CoachState)
-    builder.add_node("coach_reply", coach_reply)
-    builder.add_node("close_session", close_session)
-    builder.add_node("fallback_reply", fallback_reply)
-    builder.add_conditional_edges(
-        START,
-        route_turn,
-        {
-            "coach_reply": "coach_reply",
-            "close_session": "close_session",
-        },
-    )
-    builder.add_conditional_edges(
-        "coach_reply",
-        route_after_reply,
-        {
-            "fallback_reply": "fallback_reply",
-            "__end__": END,
-        },
-    )
-    builder.add_edge("fallback_reply", END)
-    builder.add_edge("close_session", END)
-
-    checkpoint_conn = sqlite3.connect(
-        str(db_path()), check_same_thread=False, timeout=5.0
-    )
-    checkpoint_conn.execute("PRAGMA busy_timeout = 5000")
-    try:
-        graph = builder.compile(checkpointer=SqliteSaver(checkpoint_conn))
-        yield graph
-    finally:
-        checkpoint_conn.close()
-
-
 def _session_payload(
     session: dict[str, Any],
     *,
@@ -292,6 +53,7 @@ def _session_payload(
     resolved_submission_id: str,
     fallback_used: bool,
     context_preview: str = "",
+    mode: str = "",
 ) -> dict[str, Any]:
     return {
         "session_id": session["session_id"],
@@ -306,7 +68,63 @@ def _session_payload(
         "reused": reused,
         "context_preview": context_preview
         or str(session.get("context_markdown") or "")[:400],
+        "graph": get_llm_settings().get("provider") or "ollama",
+        "mode": mode or "",
     }
+
+
+def _prepare_profile_mode(conn: sqlite3.Connection, mode: str) -> dict[str, Any]:
+    """无 submission 的日回顾 / 推荐会话。"""
+    from leetcode_tracker.coach.daily_review import format_daily_review_local
+    from leetcode_tracker.coach.daily_review import assemble_daily_facts
+
+    day = china_today().isoformat()
+    profile = build_user_profile(conn)
+    if mode == "daily_review":
+        synthetic_id = f"mode:daily_review:{day}"
+        opening = (
+            f"今天是 {day}。我可以根据你今日入库的提交做事实回顾。"
+            "点发送或再说一句「今日总结」即可；也可以问薄弱点。"
+        )
+        context = format_daily_review_local(assemble_daily_facts(profile))
+        status = "DailyReview"
+        problem_id = 0
+        thread_hint = synthetic_id
+    else:
+        synthetic_id = f"mode:recommend:{day}"
+        opening = (
+            "我可以根据你的薄弱标签推荐未 AC 的下一题（规则选题）。"
+            "点发送或说「推荐下一题」开始。"
+        )
+        weak = "、".join(profile.get("weak_tags") or []) or "（暂无）"
+        context = (
+            f"## 推荐会话\n- 日期：{day}\n- 画像：{profile.get('summary_text')}\n"
+            f"- 薄弱标签：{weak}\n"
+        )
+        status = "Recommend"
+        problem_id = 0
+        thread_hint = synthetic_id
+
+    session, created = get_or_create_session(
+        conn,
+        submission_id=synthetic_id,
+        problem_id=problem_id,
+        opening=opening,
+        context_markdown=context,
+        submission_status=status,
+    )
+    # thread_id 保持 session_id；synthetic submission_id 保证日级幂等
+    _ = thread_hint
+    return _session_payload(
+        session,
+        opening_source="template" if created else "cached",
+        reused=not created,
+        requested_submission_id="",
+        resolved_submission_id=synthetic_id,
+        fallback_used=False,
+        context_preview=context[:400],
+        mode=mode,
+    )
 
 
 def prepare(
@@ -314,9 +132,14 @@ def prepare(
     submission_id: str = "",
     *,
     problem_id: Optional[int] = None,
-    reuse_existing: bool = True,  # noqa: ARG001 - 保留 CLI/API 兼容参数
+    reuse_existing: bool = True,  # noqa: ARG001
+    mode: str = "",
 ) -> dict[str, Any]:
     """只读提交事实并原子创建模板会话；绝不调用 LLM。"""
+    mode = str(mode or "").strip()
+    if mode in PROFILE_MODES:
+        return _prepare_profile_mode(conn, mode)
+
     ctx = build_coach_context(conn, submission_id, problem_id=problem_id)
     status = str(ctx["status"])
     opening = template_opening(
@@ -346,13 +169,18 @@ def prepare(
 
 
 def chat(
-    conn: sqlite3.Connection, session_id: str, message: str
+    conn: sqlite3.Connection, session_id: str, message: str, *, action: str = ""
 ) -> dict[str, Any]:
-    """同步续聊（CLI 使用）。Web 优先走 chat_stream / SSE。"""
     chunks: list[str] = []
     done = False
-    for event in chat_stream(conn, session_id, message):
-        if event.get("type") in {"token", "fallback"}:
+    for event in chat_stream(conn, session_id, message, action=action):
+        if event.get("type") in {
+            "token",
+            "fallback",
+            "answer_egress",
+            "diagnose",
+            "deep_analysis",
+        }:
             chunks.append(str(event.get("text") or ""))
         elif event.get("type") == "done":
             done = bool(event.get("done"))
@@ -363,16 +191,53 @@ def chat(
     return {"reply": "".join(chunks), "done": done}
 
 
+def _snapshot_value(snapshot: Any, key: str, default: Any) -> Any:
+    if not snapshot or not snapshot.values:
+        return default
+    val = snapshot.values.get(key)
+    return default if val is None else val
+
+
+def _load_current_code(conn: sqlite3.Connection, session: dict[str, Any]) -> str:
+    sid = str(session.get("submission_id") or "")
+    if sid.startswith("mode:"):
+        return ""
+    sub = get_submission_by_id(conn, sid) if sid else None
+    if sub and sub.get("code"):
+        return str(sub["code"])
+    return ""
+
+
 def chat_stream(
     conn: sqlite3.Connection,
     session_id: str,
     message: str,
     *,
+    action: str = "",
     cancel_event: Optional[threading.Event] = None,
     lock_acquired: bool = False,
 ) -> Iterator[dict[str, Any]]:
-    """由 LangGraph 执行单回合并输出 ready/token/fallback/done/error。"""
+    """由 LocalGraph / ApiGraph 执行单回合；事件含 ready/token/offer_exit/done/…"""
     from langchain_core.messages import AIMessage, HumanMessage
+
+    action = str(action or "").strip()
+    if action and action not in ACTIONS:
+        yield {"type": "error", "message": f"未知 action: {action}"}
+        return
+    message = str(message or "").strip()
+    if not message and not action:
+        yield {"type": "error", "message": "message 或 action 必填其一"}
+        return
+    if not message and action:
+        message = {
+            "close": "结束",
+            "show_skeleton": "看思路",
+            "diagnose": "结束并诊断",
+            "deep_analysis": "查看精析",
+            "daily_review": "今日总结",
+            "recommend": "推荐下一题",
+            "optimize": "帮我优化",
+        }.get(action, action)
 
     session = get_session(conn, session_id)
     if session is None:
@@ -382,7 +247,7 @@ def chat_stream(
         yield {
             "type": "error",
             "code": "session_abandoned",
-            "message": "本对话已结束（云端不可达后已切回本地）。请重新打开陪练再继续。",
+            "message": "本对话已结束。请重新打开陪练再继续。",
             "reopen_required": True,
         }
         return
@@ -399,11 +264,23 @@ def chat_stream(
     stop = cancel_event or threading.Event()
     reply_parts: list[str] = []
     done = False
+    provider = str(get_llm_settings().get("provider") or "ollama")
     try:
-        yield {"type": "ready", "session_id": session_id}
+        yield {
+            "type": "ready",
+            "session_id": session_id,
+            "graph": "api" if provider == "api" else "local",
+            "actions_hint": (
+                ["close", "diagnose", "deep_analysis", "recommend", "daily_review"]
+                if provider == "api"
+                else ["close", "show_skeleton", "recommend", "daily_review"]
+            ),
+        }
         thread_id = str(session["thread_id"])
-        with _graph_for_turn(
-            stop, session_id=session_id, thread_id=thread_id
+        user_profile = build_user_profile(conn)
+        current_code = _load_current_code(conn, session)
+        with graph_for_provider(
+            stop, session_id=session_id, thread_id=thread_id, provider=provider
         ) as graph:
             config = {"configurable": {"thread_id": thread_id}}
             snapshot = graph.get_state(config)
@@ -417,17 +294,44 @@ def chat_stream(
                 "messages": messages,
                 "context_markdown": str(session.get("context_markdown") or ""),
                 "submission_status": str(session.get("submission_status") or ""),
-                "done": bool(
-                    snapshot.values.get("done")
-                    if snapshot and snapshot.values
-                    else False
-                ),
+                "done": bool(_snapshot_value(snapshot, "done", False)),
                 "fallback_turn_count": int(
-                    snapshot.values.get("fallback_turn_count") or 0
-                    if snapshot and snapshot.values
-                    else 0
+                    _snapshot_value(snapshot, "fallback_turn_count", 0) or 0
                 ),
                 "generation_error": "",
+                "provider_failover": False,
+                "turn_count": int(_snapshot_value(snapshot, "turn_count", 0) or 0),
+                "rejected_suspicions": list(
+                    _snapshot_value(snapshot, "rejected_suspicions", []) or []
+                ),
+                "mentioned_identifiers": list(
+                    _snapshot_value(snapshot, "mentioned_identifiers", []) or []
+                ),
+                "exit_offered": bool(_snapshot_value(snapshot, "exit_offered", False)),
+                "degraded": bool(_snapshot_value(snapshot, "degraded", False)),
+                "pending_action": action,
+                "problem_id": int(session.get("problem_id") or 0),
+                "last_assistant_text": str(
+                    _snapshot_value(snapshot, "last_assistant_text", "") or ""
+                ),
+                "guardrail_stripped": bool(
+                    _snapshot_value(snapshot, "guardrail_stripped", False)
+                ),
+                "consecutive_vague": int(
+                    _snapshot_value(snapshot, "consecutive_vague", 0) or 0
+                ),
+                "context_summary": str(
+                    _snapshot_value(snapshot, "context_summary", "") or ""
+                ),
+                "user_profile": user_profile,
+                "current_code": current_code,
+                "intent": str(_snapshot_value(snapshot, "intent", "") or ""),
+                "analysis_result": str(
+                    _snapshot_value(snapshot, "analysis_result", "") or ""
+                ),
+                "candidate_recommendations": list(
+                    _snapshot_value(snapshot, "candidate_recommendations", []) or []
+                ),
             }
             for mode, data in graph.stream(
                 graph_input,
@@ -439,7 +343,13 @@ def chat_stream(
                 if mode != "custom" or not isinstance(data, dict):
                     continue
                 event = dict(data)
-                if event.get("type") in {"token", "fallback"}:
+                if event.get("type") in {
+                    "token",
+                    "fallback",
+                    "answer_egress",
+                    "diagnose",
+                    "deep_analysis",
+                }:
                     reply_parts.append(str(event.get("text") or ""))
                 yield event
             final_snapshot = graph.get_state(config)
@@ -449,7 +359,12 @@ def chat_stream(
                 else False
             )
         touch_session(conn, session_id)
-        yield {"type": "done", "done": done, "reply": "".join(reply_parts)}
+        yield {
+            "type": "done",
+            "done": done,
+            "reply": "".join(reply_parts),
+            "graph": "api" if provider == "api" else "local",
+        }
     except GenerationCancelled:
         return
     except Exception as exc:  # noqa: BLE001

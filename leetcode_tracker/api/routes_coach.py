@@ -137,6 +137,7 @@ async def _prepare_body(request: Request) -> Any:
             status_code=400, content={"status": "error", "message": "invalid JSON"}
         )
     submission_id = str((payload or {}).get("submission_id") or "").strip()
+    mode = str((payload or {}).get("mode") or "").strip()
     raw_problem_id = (payload or {}).get("problem_id")
     try:
         problem_id = int(raw_problem_id) if raw_problem_id not in (None, "") else None
@@ -145,12 +146,14 @@ async def _prepare_body(request: Request) -> Any:
             status_code=400,
             content={"status": "error", "message": "problem_id must be an integer"},
         )
-    if not submission_id and problem_id is None:
+    if mode in {"daily_review", "recommend"}:
+        pass
+    elif not submission_id and problem_id is None:
         return JSONResponse(
             status_code=400,
             content={
                 "status": "error",
-                "message": "submission_id or problem_id required",
+                "message": "submission_id or problem_id or mode required",
             },
         )
 
@@ -160,12 +163,13 @@ async def _prepare_body(request: Request) -> Any:
         conn = init_db()
         try:
             ensure_stats_materialized(conn)
-            if not kg_is_imported(conn):
+            if mode not in {"daily_review", "recommend"} and not kg_is_imported(conn):
                 raise RuntimeError("__kg_missing__")
             return coach_service.prepare(
                 conn,
                 submission_id,
                 problem_id=problem_id,
+                mode=mode,
             )
         finally:
             conn.close()
@@ -262,10 +266,14 @@ async def coach_stream(request: Request) -> Any:
         )
     session_id = str((payload or {}).get("session_id") or "").strip()
     message = str((payload or {}).get("message") or "").strip()
-    if not session_id or not message:
+    action = str((payload or {}).get("action") or "").strip()
+    if not session_id or (not message and not action):
         return JSONResponse(
             status_code=400,
-            content={"status": "error", "message": "session_id and message required"},
+            content={
+                "status": "error",
+                "message": "session_id and (message or action) required",
+            },
         )
 
     from leetcode_tracker.coach import service as coach_service
@@ -316,6 +324,7 @@ async def coach_stream(request: Request) -> Any:
                     conn,
                     session_id,
                     message,
+                    action=action,
                     cancel_event=cancel_event,
                     lock_acquired=True,
                 ):
