@@ -23,6 +23,7 @@ ACTIONS = frozenset(
         "deep_analysis",
         "daily_review",
         "recommend",
+        "review",
         "optimize",
     }
 )

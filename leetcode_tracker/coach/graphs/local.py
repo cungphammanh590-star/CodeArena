@@ -26,6 +26,7 @@ from leetcode_tracker.coach.graphs.skill_nodes import (
     run_daily_review_node,
     run_optimize_local,
     run_recommend_node,
+    run_review_node,
 )
 from leetcode_tracker.coach.state import CoachState
 from leetcode_tracker.infra.db import init_db
@@ -75,7 +76,7 @@ def compile_local_graph(
                 "type": "offer_exit",
                 "reason": reason or "manual",
                 "message": note,
-                "actions": ["close", "show_skeleton", "recommend"],
+                "actions": ["close", "show_skeleton", "recommend", "review"],
                 "auto_end": False,
             }
         )
@@ -117,6 +118,15 @@ def compile_local_graph(
 
     def recommend(state: CoachState) -> dict[str, Any]:
         return run_recommend_node(
+            state,
+            cancel_event=cancel_event,
+            session_id=session_id,
+            thread_id=thread_id,
+            provider="local",
+        )
+
+    def review(state: CoachState) -> dict[str, Any]:
+        return run_review_node(
             state,
             cancel_event=cancel_event,
             session_id=session_id,
@@ -249,6 +259,7 @@ def compile_local_graph(
         "offer_exit": "offer_exit",
         "answer_egress": "answer_egress",
         "recommend": "recommend",
+        "review": "review",
         "daily_review": "daily_review",
         "optimize": "optimize",
     }
@@ -260,6 +271,7 @@ def compile_local_graph(
     builder.add_node("offer_exit", offer_exit)
     builder.add_node("answer_egress", answer_egress)
     builder.add_node("recommend", recommend)
+    builder.add_node("review", review)
     builder.add_node("daily_review", daily_review)
     builder.add_node("optimize", optimize)
     builder.add_node("fallback_reply", fallback_reply)
@@ -279,6 +291,7 @@ def compile_local_graph(
     builder.add_edge("offer_exit", END)
     builder.add_edge("answer_egress", END)
     builder.add_edge("recommend", END)
+    builder.add_edge("review", END)
     builder.add_edge("daily_review", END)
     builder.add_edge("optimize", END)
 

@@ -73,7 +73,16 @@ prepare_intent → route
 
 ---
 
-## 4. 看思路数据源（显式出口）
+## 4. 推荐（Hot100）与看思路
+
+**推荐候选池**：`coach/data/hot100.json`（静态 Hot100），**不是**本地 `problems` 表。  
+**推荐下一题**（`action=recommend`）：只推未 AC **新题**；级联续刷 → 同标签 → 薄弱。  
+**今日复习**（`action=review`）：只出已 AC 且到期的 **旧题**（固定间隔 MVP，默认 7 天）。  
+**今日总结**（`action=daily_review`）：只念聚合事实，可提示 due 数量，不选题。  
+近 7 日新题推荐写入 `coach_recommendation_log` 去重。  
+Hot100 ≥90% 且无未 AC 时，推荐返回完成引导（请去复习或图谱）。
+
+**看思路（显式出口）**：
 
 1. 本题历史 Accepted 代码（标明来源）— **仅** `show_skeleton` / answer_egress  
 2. `answer_skeletons.json` curated 文字  
@@ -91,7 +100,8 @@ Local **优化路径**可用历史 AC **提特征**，但不得把 AC `source_co
 3. 失稳阈值 → `exit_detect.py` / `state.py`  
 4. 骨架文案 → `answer_skeletons.json`  
 5. 意图规则 → `intent.py`  
-6. 推荐排序 → `recommend.py`  
-7. 图边与节点 → `graphs/local.py`、`graphs/api.py`
+6. Hot100 清单 → `coach/data/hot100.json`；推荐级联 → `recommend.py`  
+7. 复习间隔 → `review.py` 常量  
+8. 图边与节点 → `graphs/local.py`、`graphs/api.py`
 
 相关：`docs/DATA_MODEL.md`、`docs/SUBMISSION_CAPTURE_INCIDENT.md`。

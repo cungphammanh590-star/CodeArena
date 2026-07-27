@@ -9,6 +9,7 @@ const dashboardBtn = document.getElementById("open-dashboard");
 const coachBtn = document.getElementById("open-coach");
 const problemBtn = document.getElementById("open-problem");
 const dailyReviewBtn = document.getElementById("daily-review");
+const reviewQueueBtn = document.getElementById("review-queue");
 const recommendBtn = document.getElementById("recommend-next");
 const coachTitleEl = document.getElementById("coach-title");
 const coachSuggestionEl = document.getElementById("coach-suggestion");
@@ -18,6 +19,7 @@ function setOnline(online) {
   bridgeOnline = online;
   dashboardBtn.disabled = !online;
   dailyReviewBtn.disabled = !online;
+  reviewQueueBtn.disabled = !online;
   recommendBtn.disabled = !online;
   const canCoach = Boolean(
     coachHint?.problem_id || coachHint?.latest_submission_id
@@ -220,6 +222,13 @@ dailyReviewBtn.addEventListener("click", async () => {
   if (!bridgeOnline) return;
   await chrome.tabs.create({
     url: `${bridgeBase}/coach?mode=daily_review&action=daily_review`,
+  });
+});
+
+reviewQueueBtn.addEventListener("click", async () => {
+  if (!bridgeOnline) return;
+  await chrome.tabs.create({
+    url: `${bridgeBase}/coach?mode=review&action=review`,
   });
 });
 

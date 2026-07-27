@@ -18,6 +18,8 @@ def assemble_daily_facts(profile: dict[str, Any] | None) -> dict[str, Any]:
         "weak_tags": list(profile.get("weak_tags") or []),
         "problems": list(today.get("problems") or []),
         "summary_text": str(profile.get("summary_text") or ""),
+        "hot100_progress": dict(profile.get("hot100_progress") or {}),
+        "review_due_count": int(profile.get("review_due_count") or 0),
     }
 
 
@@ -41,6 +43,17 @@ def format_daily_review_local(facts: dict[str, Any]) -> str:
     weak = facts.get("weak_tags") or []
     if weak:
         lines.append("- 画像薄弱标签：" + "、".join(weak[:5]))
+    h100 = facts.get("hot100_progress") or {}
+    if h100.get("total"):
+        lines.append(
+            f"- Hot100 进度：{h100.get('done', 0)}/{h100.get('total', 0)}"
+        )
+    due_n = int(facts.get("review_due_count") or 0)
+    if due_n:
+        lines.append(
+            f"- 复习到期（固定间隔 MVP）：{due_n} 题；请点「今日复习」拉旧题队列"
+            "（「推荐下一题」只推新题）"
+        )
     problems = list(facts.get("problems") or [])[:8]
     if problems:
         lines.append("- 今日题目：")

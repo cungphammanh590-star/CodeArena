@@ -26,7 +26,7 @@ from leetcode_tracker.llm.provider import get_llm_settings
 _SESSION_LOCKS: dict[str, threading.Lock] = {}
 _SESSION_LOCKS_GUARD = threading.Lock()
 
-PROFILE_MODES = frozenset({"daily_review", "recommend"})
+PROFILE_MODES = frozenset({"daily_review", "recommend", "review"})
 
 
 def _session_lock(session_id: str) -> threading.Lock:
@@ -90,16 +90,31 @@ def _prepare_profile_mode(conn: sqlite3.Connection, mode: str) -> dict[str, Any]
         status = "DailyReview"
         problem_id = 0
         thread_hint = synthetic_id
+    elif mode == "review":
+        synthetic_id = f"mode:review:{day}"
+        opening = (
+            "这是「今日复习」：只给你到期的已 AC 旧题（固定间隔）。"
+            "点发送开始拉复习队列；练新题请用「推荐下一题」。"
+        )
+        due_n = int(profile.get("review_due_count") or 0)
+        context = (
+            f"## 复习会话\n- 日期：{day}\n- 到期题数：{due_n}\n"
+            f"- 画像：{profile.get('summary_text')}\n"
+        )
+        status = "Review"
+        problem_id = 0
+        thread_hint = synthetic_id
     else:
         synthetic_id = f"mode:recommend:{day}"
         opening = (
-            "我可以根据你的薄弱标签推荐未 AC 的下一题（规则选题）。"
-            "点发送或说「推荐下一题」开始。"
+            "这是「推荐下一题」：只推 Hot100 未 AC 新题。"
+            "点发送或说「推荐下一题」开始；温习旧题请用「今日复习」。"
         )
         weak = "、".join(profile.get("weak_tags") or []) or "（暂无）"
+        h100 = profile.get("hot100_progress") or {}
         context = (
-            f"## 推荐会话\n- 日期：{day}\n- 画像：{profile.get('summary_text')}\n"
-            f"- 薄弱标签：{weak}\n"
+            f"## 推荐会话\n- 日期：{day}\n- Hot100：{h100.get('done', 0)}/"
+            f"{h100.get('total', 0)}\n- 薄弱标签：{weak}\n"
         )
         status = "Recommend"
         problem_id = 0
@@ -236,6 +251,7 @@ def chat_stream(
             "deep_analysis": "查看精析",
             "daily_review": "今日总结",
             "recommend": "推荐下一题",
+            "review": "今日复习",
             "optimize": "帮我优化",
         }.get(action, action)
 
@@ -271,9 +287,16 @@ def chat_stream(
             "session_id": session_id,
             "graph": "api" if provider == "api" else "local",
             "actions_hint": (
-                ["close", "diagnose", "deep_analysis", "recommend", "daily_review"]
+                [
+                    "close",
+                    "diagnose",
+                    "deep_analysis",
+                    "recommend",
+                    "review",
+                    "daily_review",
+                ]
                 if provider == "api"
-                else ["close", "show_skeleton", "recommend", "daily_review"]
+                else ["close", "show_skeleton", "recommend", "review", "daily_review"]
             ),
         }
         thread_id = str(session["thread_id"])

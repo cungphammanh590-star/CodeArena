@@ -117,7 +117,8 @@
     <div id="chat" class="chat"></div>
     <div class="actions" id="actions">
       <button type="button" class="secondary" id="btn-close" disabled>结束本轮</button>
-      <button type="button" class="secondary" id="btn-review" disabled>今日总结</button>
+      <button type="button" class="secondary" id="btn-review-summary" disabled>今日总结</button>
+      <button type="button" class="secondary" id="btn-review-queue" disabled>今日复习</button>
       <button type="button" class="secondary" id="btn-recommend" disabled>推荐下一题</button>
       <button type="button" class="secondary" id="btn-skeleton" disabled>看思路</button>
       <button type="button" class="secondary" id="btn-diagnose" disabled>结束并诊断</button>
@@ -137,7 +138,8 @@
     const sendBtn = document.getElementById("send");
     const bannerEl = document.getElementById("banner");
     const btnClose = document.getElementById("btn-close");
-    const btnReview = document.getElementById("btn-review");
+    const btnReviewSummary = document.getElementById("btn-review-summary");
+    const btnReviewQueue = document.getElementById("btn-review-queue");
     const btnRecommend = document.getElementById("btn-recommend");
     const btnSkeleton = document.getElementById("btn-skeleton");
     const btnDiagnose = document.getElementById("btn-diagnose");
@@ -176,7 +178,8 @@
     function syncActionButtons() {
       const ready = Boolean(sessionId) && !busy;
       btnClose.disabled = !ready;
-      btnReview.disabled = !ready;
+      btnReviewSummary.disabled = !ready;
+      btnReviewQueue.disabled = !ready;
       btnRecommend.disabled = !ready;
       if (graphMode === "api") {
         btnSkeleton.disabled = true;
@@ -246,7 +249,11 @@
       hideBanner();
       enableComposer();
       const bootAction = actionParam || mode;
-      if (bootAction === "daily_review" || bootAction === "recommend") {
+      if (
+        bootAction === "daily_review" ||
+        bootAction === "recommend" ||
+        bootAction === "review"
+      ) {
         await sendPayload({ action: bootAction });
       }
     }
@@ -336,6 +343,7 @@
           deep_analysis: "查看精析",
           daily_review: "今日总结",
           recommend: "推荐下一题",
+          review: "今日复习",
           optimize: "优化分析",
         }[action] || action;
         addMsg("〔" + label + "〕", "user");
@@ -430,8 +438,15 @@
       if (e.key === "Enter") sendMessage();
     });
     btnClose.addEventListener("click", () => sendPayload({ action: "close" }));
-    btnReview.addEventListener("click", () => sendPayload({ action: "daily_review" }));
-    btnRecommend.addEventListener("click", () => sendPayload({ action: "recommend" }));
+    btnReviewSummary.addEventListener("click", () =>
+      sendPayload({ action: "daily_review" })
+    );
+    btnReviewQueue.addEventListener("click", () =>
+      sendPayload({ action: "review" })
+    );
+    btnRecommend.addEventListener("click", () =>
+      sendPayload({ action: "recommend" })
+    );
     btnSkeleton.addEventListener("click", () => sendPayload({ action: "show_skeleton" }));
     btnDiagnose.addEventListener("click", () => sendPayload({ action: "diagnose" }));
     btnDeep.addEventListener("click", () => sendPayload({ action: "deep_analysis" }));
@@ -445,7 +460,9 @@
         }
         graphMode = health.llm_provider === "api" ? "api" : "local";
         const profileMode =
-          modeParam === "daily_review" || modeParam === "recommend"
+          modeParam === "daily_review" ||
+          modeParam === "recommend" ||
+          modeParam === "review"
             ? modeParam
             : "";
         if (profileMode) {

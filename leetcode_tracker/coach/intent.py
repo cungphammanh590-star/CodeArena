@@ -8,6 +8,7 @@ from typing import Any, Literal, Optional
 Intent = Literal[
     "optimize",
     "recommend",
+    "review",
     "daily_review",
     "chat",
     "show_answer",
@@ -16,6 +17,7 @@ Intent = Literal[
 INTENTS: tuple[Intent, ...] = (
     "optimize",
     "recommend",
+    "review",
     "daily_review",
     "chat",
     "show_answer",
@@ -29,13 +31,18 @@ ACTION_TO_ROUTE: dict[str, str] = {
     "deep_analysis": "deep_analysis",
     "daily_review": "daily_review",
     "recommend": "recommend",
+    "review": "review",
     "optimize": "optimize",
 }
 
 _RULES: list[tuple[Intent, tuple[str, ...]]] = [
     (
+        "review",
+        ("今日复习", "复习旧题", "该复习", "温习", "复习队列", "due"),
+    ),
+    (
         "recommend",
-        ("换一题", "下一题", "下一道", "推荐", "换题", "做哪题", "刷什么"),
+        ("换一题", "下一题", "下一道", "推荐", "换题", "做哪题", "刷什么", "新题"),
     ),
     (
         "daily_review",
@@ -68,6 +75,7 @@ def parse_intent_label(raw: str) -> Intent:
     mapping = {
         "优化": "optimize",
         "推荐": "recommend",
+        "复习": "review",
         "每日回顾": "daily_review",
         "日回顾": "daily_review",
         "回顾": "daily_review",
@@ -83,7 +91,7 @@ def parse_intent_label(raw: str) -> Intent:
         if intent in text:
             return intent
     m = re.search(
-        r"\b(optimize|recommend|daily_review|chat|show_answer)\b",
+        r"\b(optimize|recommend|review|daily_review|chat|show_answer)\b",
         text,
     )
     if m:
@@ -98,7 +106,7 @@ def classify_local_discriminative(text: str, *, invoke_llm) -> Intent:
         return ruled
     prompt = (
         "将用户消息分类为以下标签之一，只输出标签本身，不要解释：\n"
-        "优化 / 推荐 / 每日回顾 / 闲聊\n\n"
+        "优化 / 推荐 / 复习 / 每日回顾 / 闲聊\n\n"
         f"用户消息：{text[:200]}\n"
         "标签："
     )
@@ -116,7 +124,7 @@ def classify_api_structured(text: str, *, invoke_llm) -> Intent:
         return ruled
     prompt = (
         "Classify the user message into exactly one intent label.\n"
-        "Labels: optimize | recommend | daily_review | chat | show_answer\n"
+        "Labels: optimize | recommend | review | daily_review | chat | show_answer\n"
         "Reply with ONLY the label.\n\n"
         f"User: {text[:400]}\n"
         "Label:"
@@ -147,6 +155,8 @@ def resolve_route(
         return "optimize"
     if intent == "recommend":
         return "recommend"
+    if intent == "review":
+        return "review"
     if intent == "daily_review":
         return "daily_review"
     if intent == "show_answer":

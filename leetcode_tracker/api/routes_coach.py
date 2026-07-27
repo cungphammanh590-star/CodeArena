@@ -146,7 +146,7 @@ async def _prepare_body(request: Request) -> Any:
             status_code=400,
             content={"status": "error", "message": "problem_id must be an integer"},
         )
-    if mode in {"daily_review", "recommend"}:
+    if mode in {"daily_review", "recommend", "review"}:
         pass
     elif not submission_id and problem_id is None:
         return JSONResponse(
@@ -163,7 +163,9 @@ async def _prepare_body(request: Request) -> Any:
         conn = init_db()
         try:
             ensure_stats_materialized(conn)
-            if mode not in {"daily_review", "recommend"} and not kg_is_imported(conn):
+            if mode not in {"daily_review", "recommend", "review"} and not kg_is_imported(
+                conn
+            ):
                 raise RuntimeError("__kg_missing__")
             return coach_service.prepare(
                 conn,

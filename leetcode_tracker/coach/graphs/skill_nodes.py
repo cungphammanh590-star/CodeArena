@@ -31,6 +31,11 @@ from leetcode_tracker.coach.recommend import (
     polish_prompt,
     recommend_problems,
 )
+from leetcode_tracker.coach.review import (
+    format_review_queue,
+    pick_review_queue,
+    polish_review_prompt,
+)
 from leetcode_tracker.coach.structure_diff import (
     compare_features,
     extract_code_features,
@@ -45,6 +50,7 @@ def prepare_intent_update(state: dict[str, Any], *, provider: str) -> dict[str, 
     if action:
         mapped = {
             "recommend": "recommend",
+            "review": "review",
             "daily_review": "daily_review",
             "optimize": "optimize",
             "show_skeleton": "show_answer",
@@ -103,9 +109,28 @@ def run_recommend_node(
     writer = get_stream_writer()
     profile = state.get("user_profile") or {}
     weak = list(profile.get("weak_tags") or [])
+    # 当前题标签（若有）用于同标签巩固
+    current_tags: list[str] = []
+    pid = int(state.get("problem_id") or 0)
     conn = init_db()
     try:
-        candidates = recommend_problems(conn, weak_tags=weak, limit=3)
+        if pid:
+            row = conn.execute(
+                "SELECT tags FROM problems WHERE problem_id = ?", (pid,)
+            ).fetchone()
+            if row and row["tags"]:
+                import json
+
+                raw = row["tags"]
+                try:
+                    val = json.loads(raw) if isinstance(raw, str) else raw
+                    if isinstance(val, list):
+                        current_tags = [str(x) for x in val if str(x).strip()]
+                except Exception:  # noqa: BLE001
+                    current_tags = []
+        candidates = recommend_problems(
+            conn, weak_tags=weak, limit=3, current_tags=current_tags
+        )
     finally:
         conn.close()
 
@@ -132,6 +157,59 @@ def run_recommend_node(
         "messages": [AIMessage(content=reply)],
         "candidate_recommendations": candidates,
         "intent": "recommend",
+        "pending_action": "",
+        "done": False,
+        "turn_count": int(state.get("turn_count") or 0) + 1,
+        "last_assistant_text": reply,
+    }
+
+
+def run_review_node(
+    state: dict[str, Any],
+    *,
+    cancel_event: threading.Event,
+    session_id: str,
+    thread_id: str,
+    provider: str,
+) -> dict[str, Any]:
+    """今日复习：只出到期旧题。"""
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.config import get_stream_writer
+
+    writer = get_stream_writer()
+    profile = state.get("user_profile") or {}
+    weak = list(profile.get("weak_tags") or [])
+    conn = init_db()
+    try:
+        candidates = pick_review_queue(conn, limit=3, prefer_tags=weak[:2])
+    finally:
+        conn.close()
+
+    fallback = format_review_queue(candidates)
+    reply = fallback
+    try:
+        prompt = polish_review_prompt(
+            candidates, str(profile.get("summary_text") or "")
+        )
+        reply, _stripped = stream_model_reply(
+            outbound=[HumanMessage(content=prompt)],
+            cancel_event=cancel_event,
+            session_id=session_id,
+            thread_id=thread_id,
+            meta={"node": "review", "graph": provider},
+        )
+        if candidates and str(candidates[0].get("problem_id") or "") not in reply:
+            reply = f"{fallback}\n\n{reply}"
+    except GenerationCancelled:
+        raise
+    except Exception:  # noqa: BLE001
+        reply = fallback
+
+    writer({"type": "token", "text": reply})
+    return {
+        "messages": [AIMessage(content=reply)],
+        "candidate_recommendations": candidates,
+        "intent": "review",
         "pending_action": "",
         "done": False,
         "turn_count": int(state.get("turn_count") or 0) + 1,

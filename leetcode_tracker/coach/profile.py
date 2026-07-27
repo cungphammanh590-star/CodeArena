@@ -44,6 +44,13 @@ def _empty_profile() -> dict[str, Any]:
             "slowest_tag": "",
             "problems": [],
         },
+        "hot100_progress": {
+            "done": 0,
+            "total": 0,
+            "ratio": 0.0,
+            "next_unsolved_id": None,
+        },
+        "review_due_count": 0,
         "summary_text": "暂无足够刷题数据，画像为空。",
     }
 
@@ -194,6 +201,28 @@ def build_user_profile(conn: sqlite3.Connection, *, recent_limit: int = 5) -> di
         bits.append("薄弱标签：" + "、".join(profile["weak_tags"][:3]))
     if profile["today"]["slowest_tag"]:
         bits.append(f"今日错题偏多标签：{profile['today']['slowest_tag']}")
+
+    # Hot100 进度 + 复习 due
+    try:
+        from leetcode_tracker.coach.hot100 import hot100_progress
+        from leetcode_tracker.coach.review import list_review_due
+
+        h100 = hot100_progress(conn)
+        profile["hot100_progress"] = h100
+        due = list_review_due(conn, limit=10)
+        profile["review_due_count"] = len(due)
+        bits.append(f"Hot100 {h100['done']}/{h100['total']}")
+        if due:
+            bits.append(f"复习到期 {len(due)} 题")
+    except Exception:  # noqa: BLE001
+        profile["hot100_progress"] = {
+            "done": 0,
+            "total": 0,
+            "ratio": 0.0,
+            "next_unsolved_id": None,
+        }
+        profile["review_due_count"] = 0
+
     profile["summary_text"] = "；".join(bits) + "。"
     return profile
 
@@ -203,10 +232,14 @@ def profile_prompt_block(profile: dict[str, Any] | None) -> str:
         return ""
     weak = "、".join(profile.get("weak_tags") or []) or "（暂无）"
     today = profile.get("today") or {}
+    h100 = profile.get("hot100_progress") or {}
     return (
         "## 用户画像（只读）\n"
         f"- 摘要：{profile.get('summary_text') or '—'}\n"
         f"- 薄弱标签：{weak}\n"
+        f"- Hot100：{h100.get('done', 0)}/{h100.get('total', 0)}"
+        f"（下一题 id={h100.get('next_unsolved_id')}）\n"
+        f"- 复习到期：{profile.get('review_due_count', 0)} 题\n"
         f"- 今日：尝试 {today.get('attempts', 0)}，AC {today.get('accepted', 0)}，"
         f"正确率 {int(float(today.get('acceptance_rate') or 0) * 100)}%\n"
     )

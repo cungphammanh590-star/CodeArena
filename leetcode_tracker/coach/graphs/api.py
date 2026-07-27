@@ -22,6 +22,7 @@ from leetcode_tracker.coach.graphs.skill_nodes import (
     run_daily_review_node,
     run_optimize_api,
     run_recommend_node,
+    run_review_node,
 )
 from leetcode_tracker.coach.sessions import abandon_session
 from leetcode_tracker.coach.state import (
@@ -197,6 +198,15 @@ def compile_api_graph(
             provider="api",
         )
 
+    def review(state: CoachState) -> dict[str, Any]:
+        return run_review_node(
+            state,
+            cancel_event=cancel_event,
+            session_id=session_id,
+            thread_id=thread_id,
+            provider="api",
+        )
+
     def daily_review(state: CoachState) -> dict[str, Any]:
         return run_daily_review_node(
             state,
@@ -258,6 +268,7 @@ def compile_api_graph(
         "diagnose": "diagnose",
         "deep_analysis": "deep_analysis",
         "recommend": "recommend",
+        "review": "review",
         "daily_review": "daily_review",
         "optimize": "optimize",
         "answer_egress": "diagnose",
@@ -270,6 +281,7 @@ def compile_api_graph(
     builder.add_node("diagnose", diagnose)
     builder.add_node("deep_analysis", deep_analysis)
     builder.add_node("recommend", recommend)
+    builder.add_node("review", review)
     builder.add_node("daily_review", daily_review)
     builder.add_node("optimize", optimize)
     builder.add_node("fallback_reply", fallback_reply)
@@ -282,6 +294,7 @@ def compile_api_graph(
             {"fallback_reply": "fallback_reply", "__end__": END},
         )
     builder.add_edge("recommend", END)
+    builder.add_edge("review", END)
     builder.add_edge("daily_review", END)
     builder.add_edge("fallback_reply", END)
     builder.add_edge("close_session", END)
