@@ -108,7 +108,7 @@
 <body>
   <header>
     <h1>维护台</h1>
-    <div class="sub">本机运维 · 破坏性操作需确认 · 不改动提交事实表</div>
+    <div class="sub">配置、图谱与陪练模型 · 危险操作需确认</div>
     <div class="nav">
       <a href="/">仪表盘</a>
       <a href="/ops">维护台</a>
@@ -116,8 +116,8 @@
   </header>
   <main>
     <section>
-      <h2>本机配置（只读）</h2>
-      <p class="hint">改端口请用 CLI：<code>leetcode-tracker config set port …</code></p>
+      <h2>当前配置（只读）</h2>
+      <p class="hint">改端口：<code>leetcode-tracker config set port …</code></p>
       <div class="row">
         <button type="button" id="btn-config">刷新配置</button>
       </div>
@@ -128,11 +128,11 @@
     <section>
       <h2>陪练模型</h2>
       <p class="hint">
-        默认本地 Ollama。也可填写 DeepSeek API Key（明文保存在本机
-        <code>~/.config/leetcode-tracker/config.json</code>）。采集流程不受影响。
+        可选 Ollama 或 DeepSeek。Key 保存在
+        <code>~/.config/leetcode-tracker/config.json</code>。
       </p>
       <div class="radio-row">
-        <label><input type="radio" name="llm-provider" value="ollama" checked /> 本地 Ollama</label>
+        <label><input type="radio" name="llm-provider" value="ollama" checked /> Ollama</label>
         <label><input type="radio" name="llm-provider" value="api" /> DeepSeek API</label>
       </div>
       <div class="row" style="margin-bottom: 10px;">
@@ -360,7 +360,7 @@
 
     document.getElementById("btn-llm-clear").onclick = function () {
       const btn = this;
-      if (!confirm("确认清除 API Key，并切回本地 Ollama？")) return;
+      if (!confirm("确认清除 API Key，并切回 Ollama？")) return;
       withBusy(btn, async () => {
         setMsg("llm-msg", "清除中…");
         try {

@@ -68,6 +68,14 @@
       color: #134e4a;
       align-self: end;
     }
+    .msg.system {
+      background: #f5f5f4;
+      color: #57534e;
+      align-self: center;
+      max-width: 100%;
+      font-size: 13px;
+      border: 1px dashed var(--line);
+    }
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -110,18 +118,17 @@
 <body>
   <header>
     <h1>刷题陪练</h1>
-    <p class="sub">双图陪练 · 检测在图内、出口在 UI · 数据仅在本机</p>
+    <p class="sub">围绕当前题目复盘与答疑</p>
   </header>
   <main>
     <div id="banner" class="banner"></div>
     <div id="chat" class="chat"></div>
     <div class="actions" id="actions">
-      <button type="button" class="secondary" id="btn-close" disabled>结束本轮</button>
+      <button type="button" class="secondary" id="btn-end" disabled>结束本轮</button>
       <button type="button" class="secondary" id="btn-review-summary" disabled>今日总结</button>
       <button type="button" class="secondary" id="btn-review-queue" disabled>今日复习</button>
       <button type="button" class="secondary" id="btn-recommend" disabled>推荐下一题</button>
       <button type="button" class="secondary" id="btn-skeleton" disabled>看思路</button>
-      <button type="button" class="secondary" id="btn-diagnose" disabled>结束并诊断</button>
       <button type="button" class="secondary" id="btn-deep" disabled>查看精析</button>
     </div>
     <div class="composer">
@@ -137,12 +144,11 @@
     const inputEl = document.getElementById("input");
     const sendBtn = document.getElementById("send");
     const bannerEl = document.getElementById("banner");
-    const btnClose = document.getElementById("btn-close");
+    const btnEnd = document.getElementById("btn-end");
     const btnReviewSummary = document.getElementById("btn-review-summary");
     const btnReviewQueue = document.getElementById("btn-review-queue");
     const btnRecommend = document.getElementById("btn-recommend");
     const btnSkeleton = document.getElementById("btn-skeleton");
-    const btnDiagnose = document.getElementById("btn-diagnose");
     const btnDeep = document.getElementById("btn-deep");
 
     const params = new URLSearchParams(location.search);
@@ -177,21 +183,21 @@
 
     function syncActionButtons() {
       const ready = Boolean(sessionId) && !busy;
-      btnClose.disabled = !ready;
+      const isApi = graphMode === "api";
+      btnEnd.disabled = !ready;
+      btnEnd.textContent = isApi ? "结束并诊断" : "结束本轮";
+      btnEnd.title = isApi
+        ? "输出诊断并结束本会话"
+        : "收束本轮并结束会话";
       btnReviewSummary.disabled = !ready;
       btnReviewQueue.disabled = !ready;
       btnRecommend.disabled = !ready;
-      if (graphMode === "api") {
-        btnSkeleton.disabled = true;
-        btnDiagnose.disabled = !ready;
-        btnDeep.disabled = !ready;
-      } else {
-        btnDiagnose.disabled = true;
-        btnDeep.disabled = true;
-        btnSkeleton.disabled = !ready;
-        if (!exitOffered && ready) {
-          btnSkeleton.title = "随时可看思路；失稳后会高亮提示";
-        }
+      btnSkeleton.style.display = isApi ? "none" : "";
+      btnDeep.style.display = isApi ? "" : "none";
+      btnSkeleton.disabled = isApi || !ready;
+      btnDeep.disabled = !isApi || !ready;
+      if (!isApi && !exitOffered && ready) {
+        btnSkeleton.title = "随时可看思路；失稳后会高亮提示";
       }
     }
 
@@ -220,7 +226,7 @@
     async function prepare(submissionId, pid, mode) {
       if (preparePromise) return preparePromise;
       preparePromise = (async () => {
-        showBanner("正在创建本地陪练会话…");
+        showBanner("正在创建陪练会话…");
         const body = {
           submission_id: submissionId || "",
           problem_id: pid ? Number(pid) : null,
@@ -277,8 +283,7 @@
           " 启动陪练。"
         );
       } else if (data.opening_source === "template") {
-        const modeHint = graphMode === "api" ? "DeepSeek" : "本地模型";
-        showBanner("已用本地模板启动；发送消息时才会调用 " + modeHint + "。");
+        showBanner("会话已就绪，发送消息后开始对话。");
       } else {
         hideBanner();
       }
@@ -378,6 +383,8 @@
           if (event === "ready" || data.type === "ready") {
             if (data.graph) graphMode = data.graph;
             syncActionButtons();
+          } else if (event === "info" || data.type === "info") {
+            addMsg(data.content || "已同步新提交", "system");
           } else if (
             event === "token" ||
             data.type === "token" ||
@@ -411,11 +418,19 @@
             }
           } else if (event === "done" || data.type === "done") {
             finished = true;
-            if (data.done) disableComposer();
+            if (data.done) {
+              disableComposer();
+              sessionId = "";
+              showBanner("本轮已结束。重新打开陪练可开始新会话。");
+            }
           }
         });
         if (!coachDiv.textContent) {
-          coachDiv.textContent = finished ? "" : "（无回复）";
+          if (!finished) {
+            coachDiv.textContent = "（无回复）";
+          } else {
+            coachDiv.remove();
+          }
         }
       } catch (err) {
         coachDiv.remove();
@@ -437,7 +452,9 @@
     inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") sendMessage();
     });
-    btnClose.addEventListener("click", () => sendPayload({ action: "close" }));
+    btnEnd.addEventListener("click", () =>
+      sendPayload({ action: graphMode === "api" ? "diagnose" : "close" })
+    );
     btnReviewSummary.addEventListener("click", () =>
       sendPayload({ action: "daily_review" })
     );
@@ -448,7 +465,6 @@
       sendPayload({ action: "recommend" })
     );
     btnSkeleton.addEventListener("click", () => sendPayload({ action: "show_skeleton" }));
-    btnDiagnose.addEventListener("click", () => sendPayload({ action: "diagnose" }));
     btnDeep.addEventListener("click", () => sendPayload({ action: "deep_analysis" }));
 
     (async function init() {
@@ -488,7 +504,7 @@
         }
         showBanner("缺少 submission、problem_id 或 mode 参数");
       } catch (err) {
-        showBanner("本机服务不可用，请先运行 leetcode-tracker serve");
+        showBanner("服务不可用，请先运行 leetcode-tracker serve");
       }
     })();
   </script>

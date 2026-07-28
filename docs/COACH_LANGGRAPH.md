@@ -20,15 +20,22 @@
   │  submission | problem_id | mode=daily_review|recommend
   ▼
 ③ POST /api/coach/stream    ← { session_id, message?, action? }
+      │  惰性同步：题目型会话对齐该 problem 最新 submission（只认库）
       └─ LocalGraph / ApiGraph
 ```
 
-`action` 可选：`close` | `show_skeleton` | `diagnose` | `deep_analysis` | **`daily_review`** | **`recommend`** | `optimize`。
+`action` 可选：`close` | `show_skeleton` | `diagnose` | `deep_analysis` | **`daily_review`** | **`recommend`** | `review`。
 
-**快车道**：`daily_review` / `recommend` **跳过意图分类**，直达子图。  
-自然语言（如「换一题」「今天刷得怎么样」）仍走意图识别。
+**结束**：API 仅「结束并诊断」（`diagnose`，含收束+abandon）；Local「结束本轮」（`close`+abandon）。二者均解除 session↔题目绑定。  
+**日级三键**（总结/复习/推荐）：旁路一次性输出，**不写入**对话 checkpoint；库指纹未变则读 `coach_side_cache`。  
+**看思路**：仅 Local 显示；**查看精析**：仅 API。
 
-SSE：`ready` / `token` / `offer_exit` / `answer_egress` / `diagnose` / `deep_analysis` / `fallback` / `done` / `error`。
+**快车道**：`daily_review` / `recommend` / `review` 旁路执行；自然语言仍走意图（刷题会话内高置信规则才分流）。
+
+**会话锚点**：同一 `session_id` / `thread_id` 续聊；每次 stream 静默对齐该题库内最新 submission（代码/status），换码时旧诊断压成意见摘要。  
+口头「我改了」但库无新行时软提示（仍进图分析），**不接受**粘贴代码同步。
+
+SSE：`ready` / `info` / `token` / `offer_exit` / `answer_egress` / `diagnose` / `deep_analysis` / `fallback` / `done` / `error`。
 
 入口 UI：扩展弹窗「今日总结 / 推荐下一题」→ `/coach?mode=…&action=…`；`coach.html` 内同名按钮。
 
@@ -48,7 +55,10 @@ SSE：`ready` / `token` / `offer_exit` / `answer_egress` / `diagnose` / `deep_an
 | `coach/graphs/api.py` | ApiGraph |
 | `coach/graphs/skill_nodes.py` | 推荐/回顾/优化共享节点 |
 | `coach/answer_egress.py` | 显式看思路出口 |
-| `coach/service.py` | prepare + `chat_stream` 注入画像 |
+| `coach/service.py` | prepare + `chat_stream` 注入画像；stream 入口惰性同步 |
+| `coach/side_skills.py` | 日级旁路（总结/复习/推荐）+ 指纹缓存 |
+| `coach/session_sync.py` | 最新提交重绑、口头改码软提示、进度反馈判定 |
+| `coach/sessions.py` | 会话元数据；`rebind_session_submission` |
 
 ---
 
@@ -103,5 +113,6 @@ Local **优化路径**可用历史 AC **提特征**，但不得把 AC `source_co
 6. Hot100 清单 → `coach/data/hot100.json`；推荐级联 → `recommend.py`  
 7. 复习间隔 → `review.py` 常量  
 8. 图边与节点 → `graphs/local.py`、`graphs/api.py`
+9. 提交同步 / 口头改码提示 → `session_sync.py`、`service.chat_stream`
 
 相关：`docs/DATA_MODEL.md`、`docs/SUBMISSION_CAPTURE_INCIDENT.md`。

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LeetCode Tracker",
   "version": "0.3.16",
-  "description": "将 leetcode.cn 提交同步到本机 LeetCode Tracker。",
+  "description": "将 leetcode.cn 提交同步到 LeetCode Tracker。",
   "permissions": ["storage", "alarms", "notifications", "tabs", "activeTab"],
   "host_permissions": [
     "https://leetcode.cn/*",

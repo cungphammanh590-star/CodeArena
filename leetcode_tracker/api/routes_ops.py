@@ -128,7 +128,7 @@ async def ops_llm_clear_key(request: Request) -> Any:
     return {
         "status": "ok",
         "config": mask_config_for_display(cfg),
-        "message": "已清除 API Key" + ("，并切回本地 Ollama" if switch else ""),
+        "message": "已清除 API Key" + ("，并切回 Ollama" if switch else ""),
     }
 
 

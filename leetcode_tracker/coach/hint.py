@@ -20,15 +20,15 @@ from leetcode_tracker.core.submissions import (
 
 def _stats_line(stats: Optional[dict[str, Any]]) -> str:
     if not stats:
-        return "尚无本地提交记录；提交一次后我会根据结果陪你复盘。"
+        return "尚无提交记录；提交一次后我会根据结果陪你复盘。"
     total = int(stats.get("total_attempts") or 0)
     ac = int(stats.get("accepted_count") or 0)
     last = stats.get("last_status") or "—"
     struggle = float(stats.get("struggle_score") or 0)
     if total <= 0:
-        return "尚无本地提交记录；提交一次后我会根据结果陪你复盘。"
+        return "尚无提交记录；提交一次后我会根据结果陪你复盘。"
     return (
-        f"本地共 {total} 次尝试，AC {ac} 次，最近状态 {last}，"
+        f"本题共 {total} 次尝试，AC {ac} 次，最近状态 {last}，"
         f"挣扎指数 {struggle:.2f}。"
     )
 

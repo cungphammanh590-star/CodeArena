@@ -83,7 +83,7 @@ function renderCoachUnavailable(message, partial = null) {
 
 async function loadCoachForCurrentProblem() {
   if (!bridgeOnline) {
-    renderCoachUnavailable("本机服务离线，请先运行 leetcode-tracker serve");
+    renderCoachUnavailable("服务离线，请先运行 leetcode-tracker serve");
     return;
   }
   const { tab, slug, cached } = await getActiveTabContext();
@@ -115,7 +115,7 @@ async function loadCoachForCurrentProblem() {
   } catch (err) {
     if (problemId) {
       renderCoachUnavailable(
-        `${err.message || err}\n（图谱建议需本机已运行 serve 且已 kg import）`,
+        `${err.message || err}\n（需已运行 serve，并完成 kg import）`,
         partialHint
       );
     } else {
@@ -173,7 +173,7 @@ async function refresh() {
       bridgeEl.className = "bad";
       bridgeOnline = false;
       setOnline(false);
-      renderCoachUnavailable("本机服务离线");
+      renderCoachUnavailable("服务离线");
     }
   }
 

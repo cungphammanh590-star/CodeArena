@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from typing import Any, Optional
 
+from leetcode_tracker.coach.strip_comments import strip_code_comments
 from leetcode_tracker.kg.queries import format_kg_context_markdown
 from leetcode_tracker.core.submissions import (
     count_today_attempts_for_problem,
@@ -73,14 +75,42 @@ def _format_memory(memory_mb: Any) -> str:
         return "—"
 
 
-def _code_snippet(code: Optional[str], *, max_lines: int = 30) -> str:
+def _code_snippet(
+    code: Optional[str], *, language: str = "", max_lines: int = 30
+) -> str:
     if not code:
         return ""
-    lines = code.splitlines()
+    cleaned = strip_code_comments(str(code), language)
+    if not cleaned:
+        return ""
+    lines = cleaned.splitlines()
     snippet = "\n".join(lines[:max_lines])
     if len(lines) > max_lines:
         snippet += "\n... (后续代码省略)"
     return snippet
+
+
+def refresh_context_code_block(
+    markdown: str, code: str, *, language: str = "", max_lines: int = 30
+) -> str:
+    """用去注释后的代码刷新上下文中的代码围栏（兼容旧 session 缓存）。"""
+    md = str(markdown or "")
+    if not md or "## 用户当前代码" not in md:
+        return md
+    snippet = _code_snippet(code, language=language, max_lines=max_lines)
+    fence_lang = (language or "text").strip().lower() or "text"
+    body = snippet or "（代码未入库，无法展示）"
+    replacement = (
+        f"## 用户当前代码（仅展示核心逻辑前 {max_lines} 行）\n"
+        f"```{fence_lang}\n{body}\n```"
+    )
+    return re.sub(
+        r"## 用户当前代码[^\n]*\n```[^\n]*\n.*?```",
+        replacement,
+        md,
+        count=1,
+        flags=re.DOTALL,
+    )
 
 
 def _status_flow(
@@ -157,8 +187,10 @@ def build_coach_context(
     language = sub.get("language") or "text"
     status = str(sub["status"])
     tags_text = _format_tags(sub.get("tags"))
-    code_snippet = _code_snippet(sub.get("code"))
-    full_code = str(sub.get("code") or "")
+    raw_code = str(sub.get("code") or "")
+    code_for_llm = strip_code_comments(raw_code, str(language))
+    code_snippet = _code_snippet(raw_code, language=str(language))
+    full_code = code_for_llm
     status_flow = _status_flow(conn, resolved_problem_id)
     status_hint = _STATUS_HINTS.get(status, "")
     runtime = _format_runtime(sub.get("runtime_ms"))

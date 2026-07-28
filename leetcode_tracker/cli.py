@@ -128,12 +128,12 @@ def cmd_coach(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="leetcode-tracker",
-        description="完全本地的力扣刷题追踪助手（仅 leetcode.cn）",
+        description="力扣刷题追踪与陪练（leetcode.cn）",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    serve = sub.add_parser("serve", help="启动本机桥接服务与网页仪表盘")
+    serve = sub.add_parser("serve", help="启动服务与网页仪表盘")
     serve.add_argument("--host", default=None, help="默认读配置")
     serve.add_argument("--port", type=int, default=None, help="默认读配置")
 

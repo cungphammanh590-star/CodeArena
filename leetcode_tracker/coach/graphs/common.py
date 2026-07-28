@@ -26,8 +26,12 @@ def is_done_message(text: str) -> bool:
 
 
 def extract_negations(user_text: str, last_assistant: str) -> list[str]:
+    from leetcode_tracker.coach.session_sync import is_progress_feedback
+
     t = (user_text or "").strip()
-    if not t or not any(p in t for p in NEGATION_PHRASES):
+    if not t or is_progress_feedback(t):
+        return []
+    if not any(p in t for p in NEGATION_PHRASES):
         return []
     snippet = (last_assistant or "").strip().split("\n")[0][:80]
     if not snippet:
@@ -84,10 +88,91 @@ def rejected_block(state: dict[str, Any]) -> str:
             + "\n".join(f"- {x}" for x in rejected)
         )
     if idents:
-        parts.append("## 已讨论标识符\n" + ", ".join(idents[:16]))
+        parts.append("## 已讨论标识符（须仍出现在当前代码中才可引用）\n" + ", ".join(idents[:16]))
     if summary:
-        parts.append("## 更早轮次摘要\n" + summary)
+        parts.append("## 意见摘要（换码前诊断仅供参考，禁止复述旧代码）\n" + summary)
     return "\n\n".join(parts)
+
+
+def fold_opinions_on_code_change(
+    messages: list[Any],
+    *,
+    prev_summary: str = "",
+    from_status: str = "",
+    to_status: str = "",
+) -> str:
+    """把换码前对话压成意见摘要（保留助手诊断要点，不保留旧码）。"""
+    bits: list[str] = []
+    for msg in messages or []:
+        content = str(getattr(msg, "content", "") or "").strip()
+        if not content:
+            continue
+        name = msg.__class__.__name__
+        if "Human" in name:
+            if content.startswith("〔") or content in {
+                "结束",
+                "看思路",
+                "今日复习",
+                "今日总结",
+                "推荐下一题",
+            }:
+                continue
+            bits.append(f"- 用户：{content[:100]}")
+        elif "AI" in name:
+            if content.startswith("（系统") or "今日复习队列" in content:
+                continue
+            # 单行意见，去掉过长代码感
+            line = content.replace("\n", " ").strip()[:160]
+            bits.append(f"- 意见：{line}")
+    header = f"【换码 {from_status or '—'}→{to_status or '—'} 前】"
+    chunk = "\n".join(bits[-20:])
+    prev = (prev_summary or "").strip()
+    parts = [p for p in (prev, header, chunk) if p]
+    return "\n".join(parts).strip()[:2000]
+
+
+def filter_idents_in_code(idents: list[str], code: str) -> list[str]:
+    src = code or ""
+    out: list[str] = []
+    for name in idents or []:
+        n = str(name).strip()
+        if n and n in src and n not in out:
+            out.append(n)
+    return out[:16]
+
+
+def messages_after_code_epoch(messages: list[Any]) -> list[Any]:
+    """换码后送模：只保留最新一条用户消息，旧对话已进意见摘要。"""
+    msgs = list(messages or [])
+    for msg in reversed(msgs):
+        if "Human" in msg.__class__.__name__:
+            return [msg]
+    return msgs[-1:] if msgs else []
+
+
+def close_summary_from_state(state: dict[str, Any]) -> str:
+    """结束对话：用意见摘要 / 最近诊断作依据。"""
+    summary = str(state.get("context_summary") or "").strip()
+    opinion_lines = [
+        ln for ln in summary.splitlines() if ln.strip().startswith("- 意见")
+    ][-3:]
+    if opinion_lines:
+        return (
+            "好的，今天先到这里。本轮值得再核对的点：\n"
+            + "\n".join(opinion_lines)
+            + "\n下次提交前对一下这些点。"
+        )
+    last = str(state.get("last_assistant_text") or "").strip().replace("\n", " ")
+    if last:
+        return (
+            "好的，今天先到这里。记得刚才提到的："
+            f"{last[:140]}{'…' if len(last) > 140 else ''}。"
+            "下次提交前再对一遍。"
+        )
+    return (
+        "好的，今天先到这里。记得把刚才怀疑的点记下来，"
+        "下次提交前再对一遍。"
+    )
 
 
 def build_system_content(
@@ -109,9 +194,20 @@ def build_system_content(
     if include_full_context and context_markdown:
         pieces.append(f"## 陪练上下文\n{context_markdown}")
     code = str(state.get("current_code") or "").strip()
-    if code and "## 用户当前代码" not in context_markdown:
+    # Local 常关掉全文 context，但仍需当前代码片段
+    already_has_code = include_full_context and "## 用户当前代码" in context_markdown
+    if code and not already_has_code:
         snippet = "\n".join(code.splitlines()[:40])
         pieces.append(f"## 用户当前代码（片段）\n```\n{snippet}\n```")
+    if bool(state.get("code_epoch_bumped")) or "【换码" in str(
+        state.get("context_summary") or ""
+    ):
+        pieces.append(
+            "## 换码说明\n"
+            "用户代码/状态已切换为库内最新。"
+            "意见摘要仅供参考；禁止复述或假设旧代码内容；"
+            "疑点必须引用【用户当前代码】里真实出现的标识符。"
+        )
     if block:
         pieces.append(block)
     if extra:

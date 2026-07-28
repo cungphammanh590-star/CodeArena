@@ -7,19 +7,32 @@ import threading
 from collections.abc import Iterator
 from typing import Any, Optional
 
-from leetcode_tracker.coach.context import build_coach_context
+from leetcode_tracker.coach.context import build_coach_context, refresh_context_code_block
 from leetcode_tracker.coach.graphs import graph_for_provider
-from leetcode_tracker.coach.graphs.common import GenerationCancelled
+from leetcode_tracker.coach.graphs.common import (
+    GenerationCancelled,
+    filter_idents_in_code,
+    fold_opinions_on_code_change,
+)
 from leetcode_tracker.coach.opening import template_opening
 from leetcode_tracker.coach.profile import build_user_profile
+from leetcode_tracker.coach.session_sync import (
+    NO_NEWER_SUBMISSION_INFO,
+    claims_code_updated,
+    maybe_sync_session_submission,
+)
 from leetcode_tracker.coach.sessions import (
     get_or_create_session,
     get_session,
     is_session_abandoned,
     touch_session,
 )
+from leetcode_tracker.coach.side_skills import SIDE_ACTIONS, run_side_skill
 from leetcode_tracker.coach.state import ACTIONS
-from leetcode_tracker.core.submissions import get_submission_by_id
+from leetcode_tracker.core.submissions import (
+    get_latest_submission_for_problem,
+    get_submission_by_id,
+)
 from leetcode_tracker.infra.timeutil import china_today
 from leetcode_tracker.llm.provider import get_llm_settings
 
@@ -213,14 +226,26 @@ def _snapshot_value(snapshot: Any, key: str, default: Any) -> Any:
     return default if val is None else val
 
 
-def _load_current_code(conn: sqlite3.Connection, session: dict[str, Any]) -> str:
+def _load_current_code(conn: sqlite3.Connection, session: dict[str, Any]) -> tuple[str, str]:
+    """按 problem 取库内最新提交代码（去注释）。mode 会话为空。"""
+    from leetcode_tracker.coach.strip_comments import strip_code_comments
+
     sid = str(session.get("submission_id") or "")
     if sid.startswith("mode:"):
-        return ""
-    sub = get_submission_by_id(conn, sid) if sid else None
-    if sub and sub.get("code"):
-        return str(sub["code"])
-    return ""
+        return "", ""
+    problem_id = int(session.get("problem_id") or 0)
+    sub = None
+    if problem_id > 0:
+        sub = get_latest_submission_for_problem(conn, problem_id)
+    if sub is None and sid:
+        sub = get_submission_by_id(conn, sid)
+    if not sub:
+        return "", ""
+    lang = str(sub.get("language") or "")
+    raw = str(sub.get("code") or "")
+    if not raw:
+        return "", lang
+    return strip_code_comments(raw, lang), lang
 
 
 def chat_stream(
@@ -233,13 +258,14 @@ def chat_stream(
     lock_acquired: bool = False,
 ) -> Iterator[dict[str, Any]]:
     """由 LocalGraph / ApiGraph 执行单回合；事件含 ready/token/offer_exit/done/…"""
-    from langchain_core.messages import AIMessage, HumanMessage
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     action = str(action or "").strip()
     if action and action not in ACTIONS:
         yield {"type": "error", "message": f"未知 action: {action}"}
         return
-    message = str(message or "").strip()
+    raw_message = str(message or "").strip()
+    message = raw_message
     if not message and not action:
         yield {"type": "error", "message": "message 或 action 必填其一"}
         return
@@ -288,7 +314,6 @@ def chat_stream(
             "graph": "api" if provider == "api" else "local",
             "actions_hint": (
                 [
-                    "close",
                     "diagnose",
                     "deep_analysis",
                     "recommend",
@@ -299,23 +324,117 @@ def chat_stream(
                 else ["close", "show_skeleton", "recommend", "review", "daily_review"]
             ),
         }
+
+        # API：结束本轮与诊断合并为 diagnose
+        if provider == "api" and action == "close":
+            action = "diagnose"
+
+        session, sync_meta = maybe_sync_session_submission(conn, session)
+
+        # 换码：前端无感；口头声称改了但库无新行时软提示
+        if (
+            sync_meta is None
+            and not action
+            and claims_code_updated(raw_message)
+        ):
+            yield {
+                "type": "info",
+                "content": NO_NEWER_SUBMISSION_INFO,
+            }
+
         thread_id = str(session["thread_id"])
         user_profile = build_user_profile(conn)
-        current_code = _load_current_code(conn, session)
+
+        # 日级三键：旁路一次性，不进 graph messages；指纹未变读缓存
+        if action in SIDE_ACTIONS:
+            try:
+                reply, from_cache = run_side_skill(
+                    conn,
+                    action,
+                    user_profile=user_profile,
+                    provider=provider,
+                    cancel_event=stop,
+                    session_id=session_id,
+                    thread_id=thread_id,
+                    problem_id=int(session.get("problem_id") or 0),
+                )
+            except GenerationCancelled:
+                return
+            yield {"type": "token", "text": reply}
+            touch_session(conn, session_id)
+            yield {
+                "type": "done",
+                "done": False,
+                "reply": reply,
+                "graph": "api" if provider == "api" else "local",
+                "side_skill": action,
+                "from_cache": from_cache,
+            }
+            return
+
+        current_code, code_lang = _load_current_code(conn, session)
+        context_markdown = refresh_context_code_block(
+            str(session.get("context_markdown") or ""),
+            current_code,
+            language=code_lang,
+        )
+        code_epoch_bumped = bool(sync_meta and sync_meta.get("code_changed"))
         with graph_for_provider(
             stop, session_id=session_id, thread_id=thread_id, provider=provider
         ) as graph:
             config = {"configurable": {"thread_id": thread_id}}
             snapshot = graph.get_state(config)
-            has_messages = bool(
-                snapshot and snapshot.values and snapshot.values.get("messages")
+            prior_messages = list(
+                _snapshot_value(snapshot, "messages", []) or []
             )
-            messages: list[Any] = [HumanMessage(content=message)]
-            if not has_messages:
-                messages.insert(0, AIMessage(content=str(session["opening"])))
+            has_messages = bool(prior_messages)
+            context_summary = str(
+                _snapshot_value(snapshot, "context_summary", "") or ""
+            )
+            rejected = list(
+                _snapshot_value(snapshot, "rejected_suspicions", []) or []
+            )
+            idents = list(
+                _snapshot_value(snapshot, "mentioned_identifiers", []) or []
+            )
+            messages: list[Any]
+
+            if code_epoch_bumped:
+                context_summary = fold_opinions_on_code_change(
+                    prior_messages,
+                    prev_summary=context_summary,
+                    from_status=str((sync_meta or {}).get("from_status") or ""),
+                    to_status=str((sync_meta or {}).get("to_status") or ""),
+                )
+                rejected = []
+                idents = filter_idents_in_code(idents, current_code)
+                removes = [
+                    RemoveMessage(id=m.id)
+                    for m in prior_messages
+                    if getattr(m, "id", None)
+                ]
+                if removes:
+                    graph.update_state(
+                        config,
+                        {
+                            "messages": removes,
+                            "context_summary": context_summary,
+                            "rejected_suspicions": rejected,
+                            "mentioned_identifiers": idents,
+                        },
+                    )
+                messages = [HumanMessage(content=message)]
+            elif not has_messages:
+                messages = [
+                    AIMessage(content=str(session["opening"])),
+                    HumanMessage(content=message),
+                ]
+            else:
+                messages = [HumanMessage(content=message)]
+
             graph_input = {
                 "messages": messages,
-                "context_markdown": str(session.get("context_markdown") or ""),
+                "context_markdown": context_markdown,
                 "submission_status": str(session.get("submission_status") or ""),
                 "done": bool(_snapshot_value(snapshot, "done", False)),
                 "fallback_turn_count": int(
@@ -324,12 +443,8 @@ def chat_stream(
                 "generation_error": "",
                 "provider_failover": False,
                 "turn_count": int(_snapshot_value(snapshot, "turn_count", 0) or 0),
-                "rejected_suspicions": list(
-                    _snapshot_value(snapshot, "rejected_suspicions", []) or []
-                ),
-                "mentioned_identifiers": list(
-                    _snapshot_value(snapshot, "mentioned_identifiers", []) or []
-                ),
+                "rejected_suspicions": rejected,
+                "mentioned_identifiers": idents,
                 "exit_offered": bool(_snapshot_value(snapshot, "exit_offered", False)),
                 "degraded": bool(_snapshot_value(snapshot, "degraded", False)),
                 "pending_action": action,
@@ -343,9 +458,8 @@ def chat_stream(
                 "consecutive_vague": int(
                     _snapshot_value(snapshot, "consecutive_vague", 0) or 0
                 ),
-                "context_summary": str(
-                    _snapshot_value(snapshot, "context_summary", "") or ""
-                ),
+                "context_summary": context_summary,
+                "code_epoch_bumped": code_epoch_bumped,
                 "user_profile": user_profile,
                 "current_code": current_code,
                 "intent": str(_snapshot_value(snapshot, "intent", "") or ""),

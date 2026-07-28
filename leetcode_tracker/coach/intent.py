@@ -35,18 +35,28 @@ ACTION_TO_ROUTE: dict[str, str] = {
     "optimize": "optimize",
 }
 
+# 规则宜短而准；避免「新题 / 今天刷 / 推荐」等子串误伤答疑话术
 _RULES: list[tuple[Intent, tuple[str, ...]]] = [
     (
         "review",
-        ("今日复习", "复习旧题", "该复习", "温习", "复习队列", "due"),
+        ("今日复习", "复习旧题", "复习队列", "该复习什么", "有什么该复习"),
     ),
     (
         "recommend",
-        ("换一题", "下一题", "下一道", "推荐", "换题", "做哪题", "刷什么", "新题"),
+        (
+            "换一题",
+            "下一题",
+            "下一道",
+            "推荐下一题",
+            "换题",
+            "做哪题",
+            "刷什么题",
+            "推荐一道",
+        ),
     ),
     (
         "daily_review",
-        ("今日总结", "今天刷", "今天怎么样", "每日回顾", "今日回顾", "掌握程度", "今天进度"),
+        ("今日总结", "今天刷得怎么样", "每日回顾", "今日回顾", "今天进度"),
     ),
     (
         "optimize",
@@ -70,9 +80,10 @@ def classify_by_rules(text: str) -> Optional[Intent]:
 
 
 def parse_intent_label(raw: str) -> Intent:
-    text = (raw or "").strip().lower()
-    # 中文标签
-    mapping = {
+    text = (raw or "").strip()
+    lower = text.lower()
+    # 优先整词/整标签，避免「这是复习相关的闲聊」被「复习」子串劫持
+    exact_zh = {
         "优化": "optimize",
         "推荐": "recommend",
         "复习": "review",
@@ -84,19 +95,25 @@ def parse_intent_label(raw: str) -> Intent:
         "看思路": "show_answer",
         "答案": "show_answer",
     }
-    for k, v in mapping.items():
-        if k in (raw or ""):
-            return v  # type: ignore[return-value]
-    for intent in INTENTS:
-        if intent in text:
-            return intent
+    if text in exact_zh:
+        return exact_zh[text]  # type: ignore[return-value]
+    if lower in INTENTS:
+        return lower  # type: ignore[return-value]
     m = re.search(
         r"\b(optimize|recommend|review|daily_review|chat|show_answer)\b",
-        text,
+        lower,
     )
     if m:
         return m.group(1)  # type: ignore[return-value]
+    for k, v in exact_zh.items():
+        if k in text:
+            return v  # type: ignore[return-value]
     return "chat"
+
+
+def is_problem_bound_session(state: dict[str, Any]) -> bool:
+    """真实题目会话（非 mode: 日回顾/推荐/复习）。"""
+    return int(state.get("problem_id") or 0) > 0
 
 
 def classify_local_discriminative(text: str, *, invoke_llm) -> Intent:

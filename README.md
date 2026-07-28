@@ -1,58 +1,104 @@
 # LeetCode Tracker
 
 完全本地的 **leetcode.cn** 刷题追踪助手（**v0.3.3**）。  
-在力扣正常提交后，浏览器扩展会把记录写到你的 Mac；可选本地 AI 陪练帮你复盘。**刷题数据不出本机。**
+在力扣正常提交后，浏览器扩展把记录写到本机；可选 AI 陪练帮你复盘。**刷题数据不出本机。**
+
+不限定操作系统：只要本机能跑 **Python 3.9+**，并用 **Chrome / Edge**（或同内核浏览器）加载扩展即可。
+
+---
 
 ## 你需要准备什么
 
-- macOS
-- Chrome 或 Edge
-- [leetcode.cn](https://leetcode.cn) 账号（照常刷题即可）
-- 可选陪练：[Ollama](https://ollama.com/) 本地模型，或在维护台填写 **DeepSeek API Key**（8GB 本机建议 `qwen2.5:7b-instruct-q4_K_M`）
+- Python **3.9+**（终端里能执行 `python` / `python3` 与 `pip`）
+- Chrome 或 Edge（用于加载扩展 + 打开仪表盘）
+- [leetcode.cn](https://leetcode.cn) 账号（照常刷题）
+- 可选陪练：本机 [Ollama](https://ollama.com/) 模型，或在维护台填写 DeepSeek API Key
 
-## 安装
+---
+
+## 怎么安装（两种方式任选）
+
+### 方式 A：下载 ZIP（适合不想用 Git 的用户）
+
+1. 打开仓库页面，下载源码压缩包并解压，例如：
+   - GitHub：`Code` → `Download ZIP`，或
+   - [Releases](https://github.com/cungphammanh590-star/leetcode-tracker/releases) 里的 **Source code (zip)**
+2. 在终端进入解压后的目录（目录名可能带 `-main` / 版本号，以你解压出来的为准）：
 
 ```bash
-# 核心（追踪 + 仪表盘）
-pip install git+https://github.com/cungphammanh590-star/leetcode-tracker.git@v0.3.3
-
-# 可选：陪练（Ollama + DeepSeek 依赖一并安装）
-pip install 'leetcode-tracker[coach]'
+cd leetcode-tracker-main
+# 若你解压的是带版本号的包，目录名会不同，改成实际路径即可
 ```
 
-若从旧版升级且维护台报缺少 `langchain-openai`，请再执行一次上面的 `[coach]` 安装后重启 `serve`。
-
-浏览器扩展请从本版 [Release](https://github.com/cungphammanh590-star/leetcode-tracker/releases/tag/v0.3.3) 下载 zip，解压后使用其中的 `extension/` 文件夹（或克隆本仓库后加载仓库内 `extension/`）。
-
-## 日常使用
+3. 安装本机命令：
 
 ```bash
-# 启动本机服务（唯一界面：浏览器）
+# 核心：追踪 + 仪表盘
+python -m pip install .
+
+# 可选：陪练依赖（本地 Ollama / DeepSeek）
+python -m pip install ".[coach]"
+```
+
+若系统默认命令是 `python3` / `pip3`，把上面的 `python` 换成 `python3` 即可。
+
+4. 浏览器扩展：使用**同一份解压目录**里的 `extension/` 文件夹（见下方「日常使用」第 2 步）。  
+   也可以从 [Release v0.3.3](https://github.com/cungphammanh590-star/leetcode-tracker/releases/tag/v0.3.3) 单独下载扩展 zip，解压后加载其中的 `extension/`。
+
+### 方式 B：用 pip 从 Git 安装
+
+```bash
+python -m pip install git+https://github.com/cungphammanh590-star/leetcode-tracker.git@v0.3.3
+
+# 可选陪练
+python -m pip install "leetcode-tracker[coach]"
+```
+
+扩展仍需单独准备：克隆仓库，或从 Release 下载扩展 zip，加载其中的 `extension/`。
+
+---
+
+## 日常使用（装好后每次这样跑）
+
+```bash
+# 1. 启动本机服务（唯一必需）
 leetcode-tracker serve
 
-# 可选：导入学习路线图（陪练更准，随包附带）
+# 2. 可选：导入学习路线图（陪练更准，随包附带）
 leetcode-tracker kg import
 ```
 
 然后：
 
-1. 打开仪表盘：**http://127.0.0.1:8763/**
-2. `chrome://extensions` → 开发者模式 → **加载已解压的扩展程序** → 选 `extension/`
-3. 在 leetcode.cn 正常做题、提交；扩展角标显示 ok 即表示已记录
-4. 需要陪练时：点通知或扩展弹窗里的「打开陪练」，在页面里发消息即可（未装 `[coach]` / 未开 Ollama 也不影响采集）
+1. 浏览器打开仪表盘：**http://127.0.0.1:8763/**
+2. 打开扩展管理页（Chrome：`chrome://extensions`，Edge：`edge://extensions`）  
+   → 打开「开发者模式」→ **加载已解压的扩展程序** → 选中 `extension/` 目录
+3. 在 [leetcode.cn](https://leetcode.cn) 正常做题、提交；扩展角标显示 ok 即表示已记录
+4. 需要陪练：点通知或扩展弹窗里的「打开陪练」，在页面发消息即可  
+   （未装 `[coach]` / 未开 Ollama 也不影响采集）
 
 维护台（清日志、重建统计、导入图谱、陪练模型）：**http://127.0.0.1:8763/ops**
 
-若改过端口：`leetcode-tracker config set port 9000`，然后重启 `serve` 并重载扩展。
+若改过端口：
+
+```bash
+leetcode-tracker config set port 9000
+```
+
+然后重启 `serve`，并在扩展里确认端口一致后重载扩展。
+
+---
 
 ## 页面一览
 
 | 地址 | 做什么 |
 |------|--------|
-| `/` | 按天概览（默认今天）、当日题目/错题、近 7 日、最近提交 |
+| `/` | 按天概览、当日题目/错题、近 7 日、最近提交 |
 | `/ops` | 维护台 |
 | `/coach` | 陪练对话 |
 | `/problems/{题号}` | 单题详情 |
+
+---
 
 ## 常用命令
 
@@ -61,27 +107,33 @@ leetcode-tracker kg import
 | `leetcode-tracker serve` | 启动本机服务 |
 | `leetcode-tracker kg import` | 导入知识图谱 |
 | `leetcode-tracker kg progress --track dp` | 查看某条路线进度 |
-| `leetcode-tracker coach follow <submission_id>` | 准备陪练会话（不调模型） |
-| `leetcode-tracker coach chat <submission_id>` | 终端续聊 |
-| `leetcode-tracker config set llm.coach_model <name>` | 更换本地模型 |
-| `leetcode-tracker autostart install` | 开机自动 `serve` |
+| `leetcode-tracker config set llm.coach_model <name>` | 更换本地陪练模型 |
+| `leetcode-tracker autostart install` | 开机自动 `serve`（当前实现偏 macOS LaunchAgent；其他系统可自行用系统服务/计划任务跑 `serve`） |
+
+---
 
 ## 数据在哪
+
+默认写在用户主目录下（各系统路径形式可能略有不同）：
 
 | 内容 | 路径 |
 |------|------|
 | 刷题记录 / 图谱 / 陪练会话 | `~/.local/share/leetcode-tracker/leetcode.db` |
 | 配置 | `~/.config/leetcode-tracker/config.json` |
 
-时间与「今日」统计均按 **中国时区（北京时间）** 切日；仪表盘可切换日期回顾历史一天。若本机仍有旧版 `~/leetcode-reports` 目录，可自行删除，产品不再读写。
+「今日」统计按 **中国时区（北京时间）** 切日；仪表盘可切换日期回顾历史一天。
+
+---
 
 ## 陪练小提示（可选）
 
-- 只追踪：不必装 Ollama / 不必填 API Key
-- 本地：打开 Ollama 并拉取模型后再在陪练页发消息
-- 云端：打开 **http://127.0.0.1:8763/ops** →「陪练模型」选 DeepSeek，填写 Key 后保存；可「测试连接」或「一键清除 Key」
+- 只追踪：不必装 Ollama，也不必填 API Key
+- 本地模型：先启动 Ollama 并拉取模型，再到陪练页发消息
+- 云端：打开 **http://127.0.0.1:8763/ops** →「陪练模型」选 DeepSeek，填写 Key 后保存
 - 模型超时/失败会有兜底回复，**不影响提交采集**
-- 8GB 机器避免同时跑多个大模型；陪练时少开无必要标签页
+- 若维护台提示缺少 `langchain-openai` 等，再执行一次 `pip install ".[coach]"`（ZIP 安装）或 `pip install "leetcode-tracker[coach]"` 后重启 `serve`
+
+---
 
 ## 说明
 

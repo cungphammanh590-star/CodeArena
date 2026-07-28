@@ -11,10 +11,12 @@ from leetcode_tracker.coach.graphs.common import (
     GenerationCancelled,
     append_unique,
     build_system_content,
+    close_summary_from_state,
     extract_identifiers,
     extract_negations,
     fallback_local_text,
     last_human_text,
+    messages_after_code_epoch,
     open_checkpoint_conn,
     stream_model_reply,
     trim_messages_for_local,
@@ -29,6 +31,7 @@ from leetcode_tracker.coach.graphs.skill_nodes import (
     run_review_node,
 )
 from leetcode_tracker.coach.state import CoachState
+from leetcode_tracker.coach.sessions import abandon_session
 from leetcode_tracker.infra.db import init_db
 
 
@@ -49,16 +52,19 @@ def compile_local_graph(
     def route_turn(state: CoachState) -> str:
         return route_after_intent(state, provider="ollama")
 
-    def close_session(_state: CoachState) -> dict[str, Any]:
-        summary = (
-            "好的，今天先到这里。记得把刚才怀疑的点记下来，"
-            "下次提交前再对一遍。"
-        )
+    def close_session(state: CoachState) -> dict[str, Any]:
+        summary = close_summary_from_state(state)
         get_stream_writer()({"type": "token", "text": summary})
+        end_conn = init_db()
+        try:
+            abandon_session(end_conn, session_id)
+        finally:
+            end_conn.close()
         return {
             "messages": [AIMessage(content=summary)],
             "done": True,
             "pending_action": "",
+            "code_epoch_bumped": False,
         }
 
     def offer_exit(state: CoachState) -> dict[str, Any]:
@@ -153,8 +159,12 @@ def compile_local_graph(
 
     def coach_reply(state: CoachState) -> dict[str, Any]:
         writer = get_stream_writer()
-        messages = trim_messages_for_local(list(state.get("messages") or []))
-        user_text = last_human_text(list(state.get("messages") or []))
+        raw_messages = list(state.get("messages") or [])
+        if bool(state.get("code_epoch_bumped")):
+            messages = messages_after_code_epoch(raw_messages)
+        else:
+            messages = trim_messages_for_local(raw_messages)
+        user_text = last_human_text(raw_messages)
         last_asst = str(state.get("last_assistant_text") or "")
         rejected = append_unique(
             list(state.get("rejected_suspicions") or []),
@@ -205,6 +215,8 @@ def compile_local_graph(
                 "consecutive_vague": vague_n,
                 "degraded": degraded,
                 "pending_action": "",
+                "code_epoch_bumped": False,
+                "context_summary": str(state.get("context_summary") or ""),
             }
         except GenerationCancelled:
             raise
@@ -218,6 +230,7 @@ def compile_local_graph(
                 "mentioned_identifiers": idents,
                 "consecutive_vague": vague_n,
                 "pending_action": "",
+                "code_epoch_bumped": False,
             }
 
     def route_after_reply(state: CoachState) -> str:
@@ -240,7 +253,7 @@ def compile_local_graph(
             {
                 "type": "fallback",
                 "text": reply,
-                "message": f"模型不可用，已切换本地降级陪练：{err}",
+                "message": f"模型不可用，已切换降级陪练：{err}",
             }
         )
         return {

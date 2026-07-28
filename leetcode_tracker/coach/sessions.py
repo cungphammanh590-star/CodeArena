@@ -247,3 +247,36 @@ def touch_session(conn: sqlite3.Connection, session_id: str) -> None:
         (now, session_id),
     )
     conn.commit()
+
+
+def rebind_session_submission(
+    conn: sqlite3.Connection,
+    session_id: str,
+    *,
+    submission_id: str,
+    submission_status: str,
+    context_markdown: str,
+) -> dict[str, Any]:
+    """将已有会话重绑到新提交；保留 session_id / thread_id / opening。"""
+    ensure_coach_session_schema(conn)
+    now = china_now_iso()
+    conn.execute(
+        """
+        UPDATE coach_sessions
+        SET submission_id = ?, submission_status = ?,
+            context_markdown = ?, updated_at = ?
+        WHERE session_id = ?
+        """,
+        (
+            submission_id,
+            submission_status,
+            context_markdown,
+            now,
+            session_id,
+        ),
+    )
+    conn.commit()
+    session = get_session(conn, session_id)
+    if session is None:
+        raise ValueError(f"未找到会话: {session_id}")
+    return session

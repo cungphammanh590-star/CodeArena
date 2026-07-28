@@ -9,9 +9,11 @@ from leetcode_tracker.coach.graphs.common import (
     GenerationCancelled,
     append_unique,
     build_system_content,
+    close_summary_from_state,
     extract_identifiers,
     extract_negations,
     last_human_text,
+    messages_after_code_epoch,
     open_checkpoint_conn,
     stream_model_reply,
     update_vague_counter,
@@ -84,16 +86,19 @@ def compile_api_graph(
     def route_turn(state: CoachState) -> str:
         return route_after_intent(state, provider="api")
 
-    def close_session(_state: CoachState) -> dict[str, Any]:
-        summary = (
-            "好的，今天先到这里。记得把刚才怀疑的点记下来，"
-            "下次提交前再对一遍。"
-        )
+    def close_session(state: CoachState) -> dict[str, Any]:
+        summary = close_summary_from_state(state)
         get_stream_writer()({"type": "token", "text": summary})
+        end_conn = _init_db_for_failover()
+        try:
+            abandon_session(end_conn, session_id)
+        finally:
+            end_conn.close()
         return {
             "messages": [AIMessage(content=summary)],
             "done": True,
             "pending_action": "",
+            "code_epoch_bumped": False,
         }
 
     def _run_guided(
@@ -107,7 +112,11 @@ def compile_api_graph(
         compress_update = _maybe_compress_messages(state)
         working = {**state, **compress_update}
         messages = list(working.get("messages") or state.get("messages") or [])
-        user_text = last_human_text(messages)
+        if bool(state.get("code_epoch_bumped")):
+            messages = messages_after_code_epoch(messages)
+        user_text = last_human_text(messages) or last_human_text(
+            list(state.get("messages") or [])
+        )
         last_asst = str(state.get("last_assistant_text") or "")
         rejected = append_unique(
             list(state.get("rejected_suspicions") or []),
@@ -155,9 +164,12 @@ def compile_api_graph(
                 "consecutive_vague": vague_n,
                 "pending_action": "",
                 "exit_offered": True,
+                "code_epoch_bumped": False,
             }
             if compress_update.get("context_summary") is not None:
                 out["context_summary"] = compress_update["context_summary"]
+            elif state.get("context_summary"):
+                out["context_summary"] = state.get("context_summary")
             return out
         except GenerationCancelled:
             raise
@@ -171,6 +183,7 @@ def compile_api_graph(
                 "mentioned_identifiers": idents,
                 "consecutive_vague": vague_n,
                 "pending_action": "",
+                "code_epoch_bumped": False,
             }
 
     def coach_reply(state: CoachState) -> dict[str, Any]:
@@ -178,8 +191,15 @@ def compile_api_graph(
 
     def diagnose(state: CoachState) -> dict[str, Any]:
         result = _run_guided(state, extra=_DIAGNOSE_EXTRA, node="diagnose")
+        if result.get("provider_failover"):
+            return result
         get_stream_writer()({"type": "diagnose", "source": "api"})
         result["done"] = True
+        end_conn = _init_db_for_failover()
+        try:
+            abandon_session(end_conn, session_id)
+        finally:
+            end_conn.close()
         return result
 
     def deep_analysis(state: CoachState) -> dict[str, Any]:
@@ -242,14 +262,14 @@ def compile_api_graph(
         reply = (
             "DeepSeek 暂时不可达"
             + (f"（{err}）" if err else "")
-            + "。已将设置切回本地 Ollama（API Key 仍保留）。"
-            "本对话已结束；请关闭本页后用本地模式重新打开陪练（不会在同一会话静默换图）。"
+            + "。已将设置切回 Ollama（API Key 仍保留）。"
+            "本对话已结束；请关闭本页后重新打开陪练。"
         )
         get_stream_writer()(
             {
                 "type": "fallback",
                 "text": reply,
-                "message": "DeepSeek 不可达，已切回本地 Ollama；请重新打开陪练。",
+                "message": "DeepSeek 不可达，已切回 Ollama；请重新打开陪练。",
                 "reopen_required": True,
                 "session_abandoned": True,
             }

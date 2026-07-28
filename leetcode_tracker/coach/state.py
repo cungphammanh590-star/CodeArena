@@ -11,7 +11,8 @@ API_DEEP_TURN_THRESHOLD = 10
 API_COMPRESS_AFTER_TURNS = 8
 
 END_PHRASES = ("结束", "够了", "先这样", "不用了", "谢谢")
-NEGATION_PHRASES = ("不对", "不是", "错了", "换一个", "不是这个", "猜错了", "不是这里")
+# 明确否定教练猜测；避免「错了」「不是」子串误伤「做错了」等进度话术
+NEGATION_PHRASES = ("不对", "换一个", "不是这个", "猜错了", "不是这里")
 VAGUE_USER_PHRASES = ("不知道", "没思路", "帮我看", "怎么办", "提示一下", "？", "?")
 
 ACTIONS = frozenset(
@@ -47,6 +48,8 @@ class CoachState(MessagesState):
     guardrail_stripped: bool
     consecutive_vague: int
     context_summary: str
+    # 本轮因库内新提交触发：旧诊断已压入 context_summary，送模勿带旧码对话
+    code_epoch_bumped: bool
     # Profile-centric
     user_profile: dict[str, Any]
     current_code: str

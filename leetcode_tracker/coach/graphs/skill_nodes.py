@@ -23,6 +23,7 @@ from leetcode_tracker.coach.intent import (
     classify_api_structured,
     classify_by_rules,
     classify_local_discriminative,
+    is_problem_bound_session,
     resolve_route,
     sync_invoke_label,
 )
@@ -62,6 +63,14 @@ def prepare_intent_update(state: dict[str, Any], *, provider: str) -> dict[str, 
         return {"intent": "chat"}
 
     ruled = classify_by_rules(user_text)
+
+    # 刷题会话：技能分流（推荐/复习/日回顾）只认高置信规则或按钮 action；
+    # 不跑 LLM 分类，避免答疑话术被误判打断当前题。
+    if is_problem_bound_session(state):
+        if ruled:
+            return {"intent": ruled}
+        return {"intent": "chat"}
+
     if ruled:
         return {"intent": ruled}
 
