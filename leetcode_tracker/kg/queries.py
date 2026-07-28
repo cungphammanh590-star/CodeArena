@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 
 @dataclass
@@ -229,3 +229,153 @@ def list_track_progress(conn: sqlite3.Connection, track_id: str | None = None) -
             }
         )
     return result
+
+
+def kg_successors_unsolved(
+    conn: sqlite3.Connection, problem_id: int, *, limit: int = 10
+) -> list[dict[str, Any]]:
+    """当前题所在主子模块中、序位更后的未 AC 题。"""
+    placements = list_placements_for_problem(conn, problem_id)
+    primary = select_primary_placement(placements)
+    if primary is None:
+        return []
+    rows = conn.execute(
+        """
+        SELECT knp.problem_id, knp.sort_order, knp.annotation,
+               COALESCE(p.title, ps.title, '') AS title,
+               COALESCE(p.slug, ps.title_slug, '') AS slug,
+               COALESCE(p.difficulty, ps.difficulty, '') AS difficulty,
+               ps.accepted_count
+        FROM kg_node_problems knp
+        LEFT JOIN problems p ON p.problem_id = knp.problem_id
+        LEFT JOIN problem_stats ps ON ps.problem_id = knp.problem_id
+        WHERE knp.node_id = ? AND knp.sort_order > ?
+        ORDER BY knp.sort_order
+        LIMIT ?
+        """,
+        (primary.node_id, primary.sort_order, limit * 3),
+    ).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        if int(r["accepted_count"] or 0) > 0:
+            continue
+        out.append(
+            {
+                "problem_id": int(r["problem_id"]),
+                "title": str(r["title"] or f"#{r['problem_id']}"),
+                "slug": str(r["slug"] or ""),
+                "difficulty": str(r["difficulty"] or ""),
+                "reason": (
+                    f"图谱后继：{primary.track_name}/{primary.submodule_name}"
+                ),
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
+def kg_same_node_unsolved(
+    conn: sqlite3.Connection, problem_id: int, *, limit: int = 10
+) -> list[dict[str, Any]]:
+    placements = list_placements_for_problem(conn, problem_id)
+    primary = select_primary_placement(placements)
+    if primary is None:
+        return []
+    rows = conn.execute(
+        """
+        SELECT knp.problem_id, knp.sort_order,
+               COALESCE(p.title, ps.title, '') AS title,
+               COALESCE(p.slug, ps.title_slug, '') AS slug,
+               COALESCE(p.difficulty, ps.difficulty, '') AS difficulty,
+               ps.accepted_count
+        FROM kg_node_problems knp
+        LEFT JOIN problems p ON p.problem_id = knp.problem_id
+        LEFT JOIN problem_stats ps ON ps.problem_id = knp.problem_id
+        WHERE knp.node_id = ? AND knp.problem_id != ?
+        ORDER BY knp.sort_order
+        LIMIT ?
+        """,
+        (primary.node_id, problem_id, limit * 3),
+    ).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        if int(r["accepted_count"] or 0) > 0:
+            continue
+        out.append(
+            {
+                "problem_id": int(r["problem_id"]),
+                "title": str(r["title"] or f"#{r['problem_id']}"),
+                "slug": str(r["slug"] or ""),
+                "difficulty": str(r["difficulty"] or ""),
+                "reason": (
+                    f"图谱同模块未完成：{primary.track_name}/{primary.submodule_name}"
+                ),
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
+def kg_weakest_node_unsolved(
+    conn: sqlite3.Connection, *, limit: int = 10
+) -> list[dict[str, Any]]:
+    """全局最弱子模块中的未 AC 题。"""
+    nodes = conn.execute(
+        "SELECT id, track_id, name FROM kg_nodes"
+    ).fetchall()
+    if not nodes:
+        return []
+    scored: list[tuple[float, str, str, str]] = []
+    for n in nodes:
+        total, accepted, rate, _, _ = _node_progress(conn, n["id"])
+        if total <= 0 or accepted >= total:
+            continue
+        track_name = conn.execute(
+            "SELECT name FROM kg_tracks WHERE id = ?", (n["track_id"],)
+        ).fetchone()
+        scored.append(
+            (
+                rate,
+                n["id"],
+                str(track_name["name"] if track_name else n["track_id"]),
+                str(n["name"]),
+            )
+        )
+    if not scored:
+        return []
+    scored.sort(key=lambda x: x[0])
+    node_id, track_name, sub_name = scored[0][1], scored[0][2], scored[0][3]
+    rows = conn.execute(
+        """
+        SELECT knp.problem_id, knp.sort_order,
+               COALESCE(p.title, ps.title, '') AS title,
+               COALESCE(p.slug, ps.title_slug, '') AS slug,
+               COALESCE(p.difficulty, ps.difficulty, '') AS difficulty,
+               ps.accepted_count
+        FROM kg_node_problems knp
+        LEFT JOIN problems p ON p.problem_id = knp.problem_id
+        LEFT JOIN problem_stats ps ON ps.problem_id = knp.problem_id
+        WHERE knp.node_id = ?
+        ORDER BY knp.sort_order
+        LIMIT ?
+        """,
+        (node_id, limit * 3),
+    ).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        if int(r["accepted_count"] or 0) > 0:
+            continue
+        out.append(
+            {
+                "problem_id": int(r["problem_id"]),
+                "title": str(r["title"] or f"#{r['problem_id']}"),
+                "slug": str(r["slug"] or ""),
+                "difficulty": str(r["difficulty"] or ""),
+                "reason": f"图谱薄弱模块：{track_name}/{sub_name}",
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out

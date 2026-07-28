@@ -69,7 +69,7 @@
 
 ### 知识图谱（`kg_*`，只读参考层）
 
-自 algorithm-stone map 导入；与用户 `submissions` 分离逻辑，可 `kg import` 重复执行。
+自 algorithm-stone map **内嵌**；`serve`/读路径时 lazy ensure。与用户 `submissions` 分离；维护台可「重建内嵌路线图」。
 
 | 表 | 说明 |
 |----|------|
@@ -77,9 +77,16 @@
 | `kg_nodes` | 子模块；`id` = `{track_id}::{sort_order}::{name}` |
 | `kg_node_problems` | 题在子模块内顺序与 `annotation` |
 | `kg_edges` | 同子模块内学习顺序边 |
-| `kg_meta` | 导入时间、来源等 |
+| `kg_meta` | 导入时间、来源、bundled 指纹等 |
 
-多 track 选题（陪练）：**最弱 node 优先**，平局取**最近活跃** track。
+### 题单与已掌握
+
+| 表 | 说明 |
+|----|------|
+| `problem_lists` / `problem_list_items` | 多题单；`hot100` 只读物化 |
+| `user_problem_flags` | `mastered` 屏蔽（不算 AC 进度） |
+
+配置 `learning.list_mode` / `kg_mode` / `active_list_id`（默认双开 + hot100）。
 
 ### 陪练（`coach_sessions` + LangGraph checkpoint 表）
 

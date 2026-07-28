@@ -15,11 +15,18 @@ LLM_DEFAULTS: dict[str, Any] = {
     "base_url": "",  # 可选；DeepSeek 默认 https://api.deepseek.com
 }
 
+LEARNING_DEFAULTS: dict[str, Any] = {
+    "list_mode": True,
+    "kg_mode": True,
+    "active_list_id": "hot100",
+}
+
 DEFAULTS: dict[str, Any] = {
     "host": "127.0.0.1",
     "port": 8763,
     "autostart": False,
     "llm": deepcopy(LLM_DEFAULTS),
+    "learning": deepcopy(LEARNING_DEFAULTS),
 }
 
 CONFIG_KEYS = sorted(
@@ -32,6 +39,9 @@ CONFIG_KEYS = sorted(
         "llm.api_provider",
         "llm.api_key",
         "llm.base_url",
+        "learning.list_mode",
+        "learning.kg_mode",
+        "learning.active_list_id",
     }
 )
 
@@ -48,6 +58,14 @@ def _merge_llm(target: dict[str, Any], raw: Any) -> None:
     if not isinstance(raw, dict):
         return
     for key in LLM_DEFAULTS:
+        if key in raw:
+            target[key] = raw[key]
+
+
+def _merge_learning(target: dict[str, Any], raw: Any) -> None:
+    if not isinstance(raw, dict):
+        return
+    for key in LEARNING_DEFAULTS:
         if key in raw:
             target[key] = raw[key]
 
@@ -75,6 +93,18 @@ def _normalize_config(data: dict[str, Any]) -> dict[str, Any]:
     data["llm"]["base_url"] = str(data["llm"].get("base_url") or "")
     if data["llm"]["provider"] == "api" and not data["llm"]["api_provider"]:
         data["llm"]["api_provider"] = "deepseek"
+
+    learning = data.get("learning")
+    if not isinstance(learning, dict):
+        data["learning"] = deepcopy(LEARNING_DEFAULTS)
+    else:
+        merged_l = deepcopy(LEARNING_DEFAULTS)
+        _merge_learning(merged_l, learning)
+        data["learning"] = merged_l
+    data["learning"]["list_mode"] = bool(data["learning"]["list_mode"])
+    data["learning"]["kg_mode"] = bool(data["learning"]["kg_mode"])
+    active = str(data["learning"].get("active_list_id") or "hot100").strip()
+    data["learning"]["active_list_id"] = active or "hot100"
     return data
 
 
@@ -90,6 +120,8 @@ def load_config() -> dict[str, Any]:
                         data[key] = raw[key]
                 if "llm" in raw:
                     _merge_llm(data["llm"], raw["llm"])
+                if "learning" in raw:
+                    _merge_learning(data["learning"], raw["learning"])
         except (json.JSONDecodeError, OSError):
             pass
     return _normalize_config(data)
@@ -117,7 +149,17 @@ def _set_nested(cfg: dict[str, Any], key: str, value: str) -> None:
         cfg.setdefault("llm", deepcopy(LLM_DEFAULTS))
         cfg["llm"][sub] = value
         return
-    if key not in DEFAULTS or key == "llm":
+    if key.startswith("learning."):
+        sub = key.split(".", 1)[1]
+        if sub not in LEARNING_DEFAULTS:
+            raise ValueError(f"不支持的配置项: {key}")
+        cfg.setdefault("learning", deepcopy(LEARNING_DEFAULTS))
+        if sub in {"list_mode", "kg_mode"}:
+            cfg["learning"][sub] = value.strip().lower() in {"1", "true", "yes", "on"}
+        else:
+            cfg["learning"][sub] = value
+        return
+    if key not in DEFAULTS or key in {"llm", "learning"}:
         raise ValueError(f"不支持的配置项: {key}")
     if key == "port":
         cfg[key] = int(value)
@@ -125,6 +167,29 @@ def _set_nested(cfg: dict[str, Any], key: str, value: str) -> None:
         cfg[key] = value.strip().lower() in {"1", "true", "yes", "on"}
     else:
         cfg[key] = value
+
+
+def update_learning_config(
+    *,
+    list_mode: bool | None = None,
+    kg_mode: bool | None = None,
+    active_list_id: str | None = None,
+) -> dict[str, Any]:
+    cfg = load_config()
+    learning = cfg.setdefault("learning", deepcopy(LEARNING_DEFAULTS))
+    if list_mode is not None:
+        learning["list_mode"] = bool(list_mode)
+    if kg_mode is not None:
+        learning["kg_mode"] = bool(kg_mode)
+    if active_list_id is not None:
+        aid = str(active_list_id).strip() or "hot100"
+        learning["active_list_id"] = aid
+    save_config(cfg)
+    return load_config()
+
+
+def get_learning_config() -> dict[str, Any]:
+    return dict(load_config().get("learning") or LEARNING_DEFAULTS)
 
 
 def set_config_value(key: str, value: str) -> dict[str, Any]:

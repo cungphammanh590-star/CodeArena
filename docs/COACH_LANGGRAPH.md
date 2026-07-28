@@ -85,12 +85,13 @@ prepare_intent → route
 
 ## 4. 推荐（Hot100）与看思路
 
-**推荐候选池**：`coach/data/hot100.json`（静态 Hot100），**不是**本地 `problems` 表。  
-**推荐下一题**（`action=recommend`）：只推未 AC **新题**；级联续刷 → 同标签 → 薄弱。  
-**今日复习**（`action=review`）：只出已 AC 且到期的 **旧题**（固定间隔 MVP，默认 7 天）。  
+**推荐候选池**：活跃题单（默认内嵌 Hot100，可 JSON 导入替换）∪ 知识图谱相近题（可开关）。  
+**推荐下一题**（`action=recommend`）：优先级为题单续刷 → 题单同标签/薄弱 → 图谱后继/同模块 → 图谱最弱模块 → 题单补位；同题合并理由；过滤「已掌握」。  
+**今日复习**（`action=review`）：活跃题单 ∩ 已 AC ∩ 到期 ∩ ¬已掌握（固定间隔 MVP，默认 7 天）。  
 **今日总结**（`action=daily_review`）：只念聚合事实，可提示 due 数量，不选题。  
 近 7 日新题推荐写入 `coach_recommendation_log` 去重。  
-Hot100 ≥90% 且无未 AC 时，推荐返回完成引导（请去复习或图谱）。
+题单完成度按 **AC** 计；已掌握为屏蔽层，不算进度。  
+知识图谱随包内嵌，启动时 lazy ensure，无需日常 `kg import`。
 
 **看思路（显式出口）**：
 
@@ -110,9 +111,10 @@ Local **优化路径**可用历史 AC **提特征**，但不得把 AC `source_co
 3. 失稳阈值 → `exit_detect.py` / `state.py`  
 4. 骨架文案 → `answer_skeletons.json`  
 5. 意图规则 → `intent.py`  
-6. Hot100 清单 → `coach/data/hot100.json`；推荐级联 → `recommend.py`  
-7. 复习间隔 → `review.py` 常量  
+6. 活跃题单 → `coach/catalog.py`（Hot100 物化 / JSON 导入）；推荐级联 → `recommend.py`  
+7. 复习间隔 → `review.py` 常量；已掌握 → `mastered.py`  
 8. 图边与节点 → `graphs/local.py`、`graphs/api.py`
 9. 提交同步 / 口头改码提示 → `session_sync.py`、`service.chat_stream`
+10. 学习偏好 → `config.json` 的 `learning.*`
 
 相关：`docs/DATA_MODEL.md`、`docs/SUBMISSION_CAPTURE_INCIDENT.md`。

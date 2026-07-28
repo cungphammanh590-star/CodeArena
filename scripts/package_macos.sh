@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="$(python3 -c "from leetcode_tracker import __version__; print(__version__)" 2>/dev/null || echo "0.3.3")"
+VERSION="$(python3 -c "from leetcode_tracker import __version__; print(__version__)" 2>/dev/null || echo "0.3.4")"
 STAGE="$ROOT/release/stage"
 OUT_DIR="$ROOT/release"
 DIST_NAME="LeetCode-Tracker-macOS-v${VERSION}"
@@ -53,13 +53,12 @@ LeetCode Tracker v${VERSION}（仅支持 leetcode.cn）
    扩展角标显示 ok 表示已记录
    需要复盘时点通知或弹窗「打开陪练」
 
-可选：导入学习路线图
-   leetcode-tracker kg import
+可选：首页可开关题单 / 知识图谱模式；维护台可导入自定义题单。
+图谱随包装载，启动时自动就绪（日常不必再 kg import）。
 
 数据保存在本机：
   刷题记录：~/.local/share/leetcode-tracker/leetcode.db
   配置：~/.config/leetcode-tracker/config.json
-  日报：~/leetcode-reports（可配置）
 
 说明：本版已取消桌面 App，请用终端 serve + 浏览器。
 EOF

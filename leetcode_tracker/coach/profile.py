@@ -49,6 +49,7 @@ def _empty_profile() -> dict[str, Any]:
             "total": 0,
             "ratio": 0.0,
             "next_unsolved_id": None,
+            "mastered_count": 0,
         },
         "review_due_count": 0,
         "summary_text": "暂无足够刷题数据，画像为空。",
@@ -211,7 +212,11 @@ def build_user_profile(conn: sqlite3.Connection, *, recent_limit: int = 5) -> di
         profile["hot100_progress"] = h100
         due = list_review_due(conn, limit=10)
         profile["review_due_count"] = len(due)
-        bits.append(f"Hot100 {h100['done']}/{h100['total']}")
+        lid = h100.get("list_id") or "题单"
+        bits.append(f"题单({lid}) {h100['done']}/{h100['total']}")
+        mastered_n = int(h100.get("mastered_count") or 0)
+        if mastered_n:
+            bits.append(f"已掌握屏蔽 {mastered_n} 题")
         if due:
             bits.append(f"复习到期 {len(due)} 题")
     except Exception:  # noqa: BLE001
@@ -220,6 +225,7 @@ def build_user_profile(conn: sqlite3.Connection, *, recent_limit: int = 5) -> di
             "total": 0,
             "ratio": 0.0,
             "next_unsolved_id": None,
+            "mastered_count": 0,
         }
         profile["review_due_count"] = 0
 
@@ -233,12 +239,14 @@ def profile_prompt_block(profile: dict[str, Any] | None) -> str:
     weak = "、".join(profile.get("weak_tags") or []) or "（暂无）"
     today = profile.get("today") or {}
     h100 = profile.get("hot100_progress") or {}
+    lid = h100.get("list_id") or "hot100"
     return (
         "## 用户画像（只读）\n"
         f"- 摘要：{profile.get('summary_text') or '—'}\n"
         f"- 薄弱标签：{weak}\n"
-        f"- Hot100：{h100.get('done', 0)}/{h100.get('total', 0)}"
-        f"（下一题 id={h100.get('next_unsolved_id')}）\n"
+        f"- 题单({lid})：{h100.get('done', 0)}/{h100.get('total', 0)}"
+        f"（下一题 id={h100.get('next_unsolved_id')}；"
+        f"已掌握屏蔽 {h100.get('mastered_count', 0)}）\n"
         f"- 复习到期：{profile.get('review_due_count', 0)} 题\n"
         f"- 今日：尝试 {today.get('attempts', 0)}，AC {today.get('accepted', 0)}，"
         f"正确率 {int(float(today.get('acceptance_rate') or 0) * 100)}%\n"

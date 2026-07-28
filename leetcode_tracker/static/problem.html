@@ -6,22 +6,23 @@
   <title>题目详情 · LeetCode Tracker</title>
   <style>
     :root {
-      --bg: #f4f1eb;
-      --ink: #1c1917;
-      --muted: #78716c;
-      --card: #fffcf7;
-      --line: #e7e5e4;
-      --ok: #15803d;
-      --warn: #b45309;
-      --accent: #0f766e;
+      --bg: #f7f1ef;
+      --ink: #3f3a38;
+      --muted: #948984;
+      --card: #fffbf9;
+      --line: #eadfd9;
+      --ok: #6d9f82;
+      --accent: #c67a88;
+      --wash-mint: #d8ebe3;
+      --accent-soft: #f4e0e4;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "IBM Plex Sans", "Noto Sans SC", system-ui, sans-serif;
       background:
-        radial-gradient(1200px 500px at 10% -10%, #d9f3ef 0%, transparent 55%),
-        radial-gradient(900px 400px at 100% 0%, #fde68a55 0%, transparent 50%),
+        radial-gradient(1200px 500px at 10% -10%, var(--wash-mint) 0%, transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, #f3d6d166 0%, transparent 50%),
         var(--bg);
       color: var(--ink);
       min-height: 100vh;
@@ -34,6 +35,49 @@
       margin: 0 auto;
     }
     h1 { margin: 0; font-size: 26px; letter-spacing: -0.03em; }
+    .master-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .master-btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 1px 0 rgba(28, 25, 23, 0.04);
+    }
+    .master-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .master-btn.on {
+      border-color: #d4a0a8;
+      background: var(--accent-soft);
+      color: #9a5563;
+    }
+    .master-btn.on:hover {
+      border-color: #d48888;
+      background: #f8e8e8;
+      color: #b45c5c;
+    }
+    .master-btn:disabled {
+      cursor: wait;
+      opacity: 0.55;
+    }
+    .master-hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
     .sub { color: var(--muted); margin-top: 8px; font-size: 14px; line-height: 1.5; }
     .back { font-size: 13px; display: inline-block; margin-bottom: 10px; }
     main { max-width: 960px; margin: 0 auto; padding: 12px 24px 40px; }
@@ -45,9 +89,9 @@
       background: #e7e5e4;
       color: #44403c;
     }
-    .diff-easy { color: #15803d; }
-    .diff-medium { color: #b45309; }
-    .diff-hard { color: #b91c1c; }
+    .diff-easy { color: #6d9f82; }
+    .diff-medium { color: #d4a06a; }
+    .diff-hard { color: #c97878; }
     .grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -82,10 +126,10 @@
       border-radius: 999px;
       background: #f5f5f4;
     }
-    .pill-improved { background: #dcfce7; color: #166534; }
-    .pill-stuck { background: #fee2e2; color: #991b1b; }
-    .pill-declined { background: #ffedd5; color: #9a3412; }
-    .pill-first_ac { background: #ccfbf1; color: #115e59; }
+    .pill-improved { background: #e0f0e6; color: #4f7d62; }
+    .pill-stuck { background: #f8e4e4; color: #a85d5d; }
+    .pill-declined { background: #f7ead8; color: #a67a45; }
+    .pill-first_ac { background: #e5f3ee; color: #5a8f7c; }
     .breakdown { font-size: 13px; line-height: 1.7; color: #44403c; }
     #status { font-size: 12px; color: var(--muted); }
     .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
@@ -99,6 +143,15 @@
     <a class="back" href="/">← 返回仪表盘</a>
     <h1 id="title">题目详情</h1>
     <div class="sub" id="meta">加载中…</div>
+    <div class="master-row" id="master-row" hidden>
+      <button
+        type="button"
+        class="master-btn"
+        id="master-btn"
+        title="标记后不再出现在推荐与复习里"
+      >标记已掌握</button>
+      <span class="master-hint" id="master-hint">标记后不再出现在推荐与复习</span>
+    </div>
     <div class="tags" id="tags"></div>
   </header>
   <main>
@@ -197,6 +250,58 @@
       return "https://leetcode.cn/problems/" + encodeURIComponent(slug) + "/";
     }
 
+    let currentMastered = false;
+    let masterBusy = false;
+
+    function syncMasterBtn(mastered) {
+      currentMastered = !!mastered;
+      const row = document.getElementById("master-row");
+      const btn = document.getElementById("master-btn");
+      const hint = document.getElementById("master-hint");
+      row.hidden = false;
+      btn.classList.toggle("on", currentMastered);
+      if (currentMastered) {
+        btn.textContent = "取消掌握";
+        btn.title = "取消后，本题可再次出现在推荐与复习里";
+        hint.textContent = "当前已屏蔽推荐与复习";
+      } else {
+        btn.textContent = "标记已掌握";
+        btn.title = "标记后不再出现在推荐与复习里";
+        hint.textContent = "标记后不再出现在推荐与复习";
+      }
+    }
+
+    document.getElementById("master-btn").onclick = async function () {
+      const pid = problemIdFromPath();
+      if (!pid || masterBusy) return;
+      const btn = this;
+      masterBusy = true;
+      btn.disabled = true;
+      try {
+        const next = !currentMastered;
+        const res = await fetch(
+          "/api/problems/" + pid + "/mastered",
+          next
+            ? {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}",
+              }
+            : { method: "DELETE" }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status === "error") {
+          throw new Error(data.message || "操作失败");
+        }
+        syncMasterBtn(next);
+      } catch (err) {
+        document.getElementById("status").textContent = String(err);
+      } finally {
+        btn.disabled = false;
+        masterBusy = false;
+      }
+    };
+
     function renderMetrics(p) {
       const items = [
         ["总尝试", p.total_attempts],
@@ -246,6 +351,7 @@
         const diff = p.difficulty || "未知";
         document.getElementById("title").textContent = p.problem_id + ". " + p.title;
         document.title = p.problem_id + ". " + p.title + " · LeetCode Tracker";
+        if (!masterBusy) syncMasterBtn(!!p.mastered);
         document.getElementById("meta").innerHTML =
           '<span class="' +
           diffClass(diff) +

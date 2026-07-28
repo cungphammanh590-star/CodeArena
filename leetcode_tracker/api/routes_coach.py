@@ -15,7 +15,6 @@ from leetcode_tracker.coach.deps import (
     coach_import_error_message,
 )
 from leetcode_tracker.infra.db import init_db
-from leetcode_tracker.kg.import_maps import kg_is_imported
 from leetcode_tracker.core.problem_stats import ensure_stats_materialized
 from leetcode_tracker.core.submissions import get_problem_id_by_slug
 
@@ -163,10 +162,13 @@ async def _prepare_body(request: Request) -> Any:
         conn = init_db()
         try:
             ensure_stats_materialized(conn)
-            if mode not in {"daily_review", "recommend", "review"} and not kg_is_imported(
-                conn
-            ):
-                raise RuntimeError("__kg_missing__")
+            if mode not in {"daily_review", "recommend", "review"}:
+                from leetcode_tracker.kg.import_maps import ensure_kg_imported
+
+                try:
+                    ensure_kg_imported(conn)
+                except Exception:  # noqa: BLE001
+                    pass
             return coach_service.prepare(
                 conn,
                 submission_id,
@@ -180,14 +182,6 @@ async def _prepare_body(request: Request) -> Any:
         result = await asyncio.to_thread(_run)
         return {"status": "ok", **result}
     except RuntimeError as exc:
-        if str(exc) == "__kg_missing__":
-            return JSONResponse(
-                status_code=409,
-                content={
-                    "status": "error",
-                    "message": "知识图谱未导入，请先运行: leetcode-tracker kg import",
-                },
-            )
         return JSONResponse(
             status_code=500, content={"status": "error", "message": str(exc)}
         )

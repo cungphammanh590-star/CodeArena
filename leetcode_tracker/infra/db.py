@@ -116,6 +116,37 @@ CREATE TABLE IF NOT EXISTS kg_meta (
 
 CREATE INDEX IF NOT EXISTS idx_kg_node_problems_pid ON kg_node_problems(problem_id);
 CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges(from_problem_id);
+
+CREATE TABLE IF NOT EXISTS problem_lists (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    source TEXT DEFAULT 'user',
+    readonly INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS problem_list_items (
+    list_id TEXT NOT NULL,
+    problem_id INTEGER NOT NULL,
+    slug TEXT NOT NULL,
+    title TEXT NOT NULL,
+    difficulty TEXT NOT NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (list_id, problem_id),
+    FOREIGN KEY (list_id) REFERENCES problem_lists(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_problem_list_items_order
+    ON problem_list_items(list_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS user_problem_flags (
+    problem_id INTEGER PRIMARY KEY,
+    mastered INTEGER NOT NULL DEFAULT 0,
+    mastered_at TEXT,
+    note TEXT
+);
 """
 
 
@@ -141,4 +172,10 @@ def init_db(conn: sqlite3.Connection | None = None) -> sqlite3.Connection:
     from leetcode_tracker.infra.migrate_tz import ensure_china_timestamps
 
     ensure_china_timestamps(conn)
+    try:
+        from leetcode_tracker.coach.catalog import ensure_catalog_schema
+
+        ensure_catalog_schema(conn)
+    except Exception:  # noqa: BLE001
+        pass
     return conn

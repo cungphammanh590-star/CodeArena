@@ -6,19 +6,24 @@
   <title>陪练 · LeetCode Tracker</title>
   <style>
     :root {
-      --bg: #f4f1eb;
-      --ink: #1c1917;
-      --muted: #78716c;
-      --card: #fffcf7;
-      --line: #e7e5e4;
-      --accent: #0f766e;
-      --coach: #7c3aed;
+      --bg: #f7f1ef;
+      --ink: #3f3a38;
+      --muted: #948984;
+      --card: #fffbf9;
+      --line: #eadfd9;
+      --accent: #c67a88;
+      --coach: #9b8ec4;
+      --wash-mint: #d8ebe3;
+      --accent-soft: #f4e0e4;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "IBM Plex Sans", "Noto Sans SC", system-ui, sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(1100px 480px at 8% -10%, var(--wash-mint) 0%, transparent 55%),
+        radial-gradient(860px 400px at 100% 0%, #e8dff466 0%, transparent 50%),
+        var(--bg);
       color: var(--ink);
       min-height: 100vh;
     }
@@ -31,9 +36,9 @@
     .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
     main { max-width: 720px; margin: 0 auto; padding: 8px 24px 32px; }
     .banner {
-      background: #fef3c7;
-      border: 1px solid #fcd34d;
-      color: #92400e;
+      background: #f7ead8;
+      border: 1px solid #e8c9a0;
+      color: #9a6b3a;
       padding: 10px 12px;
       border-radius: 10px;
       font-size: 13px;
@@ -59,13 +64,13 @@
       white-space: pre-wrap;
     }
     .msg.coach {
-      background: #ede9fe;
-      color: #4c1d95;
+      background: #ece7f6;
+      color: #5d5285;
       align-self: flex-start;
     }
     .msg.user {
-      background: #ccfbf1;
-      color: #134e4a;
+      background: var(--accent-soft);
+      color: #8a5560;
       align-self: end;
     }
     .msg.system {
@@ -486,8 +491,7 @@
           return;
         }
         if (!health.kg_imported) {
-          showBanner("知识图谱未导入：leetcode-tracker kg import");
-          return;
+          showBanner("知识图谱尚未就绪，将在后台自动加载；陪练仍可使用");
         }
         if (sessionId) {
           addMsg("继续会话 " + sessionId + "（直接输入即可）", "coach");

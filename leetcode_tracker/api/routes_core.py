@@ -24,6 +24,12 @@ def health() -> Any:
     try:
         conn = init_db()
         try:
+            from leetcode_tracker.kg.import_maps import ensure_kg_imported
+
+            try:
+                ensure_kg_imported(conn)
+            except Exception:  # noqa: BLE001
+                pass
             count = count_submissions(conn)
             kg_imported = kg_is_imported(conn)
         finally:

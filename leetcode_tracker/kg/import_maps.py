@@ -121,6 +121,42 @@ def kg_is_imported(conn: sqlite3.Connection) -> bool:
     return bool(row and int(row["c"]) > 0)
 
 
+def _bundled_fingerprint() -> str:
+    root = bundled_maps_dir()
+    if not root.is_dir():
+        return ""
+    parts: list[str] = []
+    for path in sorted(root.glob("leetcode-*.txt")):
+        try:
+            st = path.stat()
+            parts.append(f"{path.name}:{st.st_mtime_ns}:{st.st_size}")
+        except OSError:
+            continue
+    return "|".join(parts)
+
+
+def ensure_kg_imported(conn: sqlite3.Connection) -> dict[str, Any]:
+    """空库或 bundled maps 指纹变化时静默写入；失败不抛给调用方（由调用方决定）。"""
+    fp = _bundled_fingerprint()
+    meta = {
+        row["key"]: row["value"]
+        for row in conn.execute("SELECT key, value FROM kg_meta").fetchall()
+    }
+    need = (not kg_is_imported(conn)) or (
+        bool(fp) and meta.get("bundled_fingerprint") != fp
+    )
+    if not need:
+        return {"ensured": False, "imported": True, **get_kg_status(conn)}
+    result = import_maps(conn)
+    if fp:
+        conn.execute(
+            "INSERT OR REPLACE INTO kg_meta (key, value) VALUES (?, ?)",
+            ("bundled_fingerprint", fp),
+        )
+        conn.commit()
+    return {"ensured": True, **result}
+
+
 def get_kg_status(conn: sqlite3.Connection) -> dict[str, Any]:
     tracks = int(conn.execute("SELECT COUNT(*) AS c FROM kg_tracks").fetchone()["c"])
     nodes = int(conn.execute("SELECT COUNT(*) AS c FROM kg_nodes").fetchone()["c"])

@@ -180,7 +180,24 @@ def build_coach_context(
 
     resolved_problem_id = int(sub["problem_id"])
     today_count = count_today_attempts_for_problem(conn, resolved_problem_id)
-    kg_md, placement = format_kg_context_markdown(conn, resolved_problem_id)
+
+    from leetcode_tracker.infra.config import get_learning_config
+    from leetcode_tracker.kg.import_maps import ensure_kg_imported, kg_is_imported
+
+    learning = get_learning_config()
+    kg_md = ""
+    placement = None
+    if learning.get("kg_mode", True):
+        try:
+            ensure_kg_imported(conn)
+        except Exception:  # noqa: BLE001
+            pass
+        if kg_is_imported(conn):
+            kg_md, placement = format_kg_context_markdown(conn, resolved_problem_id)
+        else:
+            kg_md = "（知识图谱暂不可用）"
+    else:
+        kg_md = "（知识图谱模式已关闭）"
 
     title = sub.get("title") or f"Problem {resolved_problem_id}"
     difficulty = sub.get("difficulty") or "—"

@@ -212,7 +212,11 @@ def run_side_skill(
     # recommend
     tags = _current_tags(conn, int(problem_id or 0))
     candidates = recommend_problems(
-        conn, weak_tags=weak, limit=3, current_tags=tags
+        conn,
+        weak_tags=weak,
+        limit=3,
+        current_tags=tags,
+        current_problem_id=int(problem_id or 0) or None,
     )
     fp = _fingerprint(
         {

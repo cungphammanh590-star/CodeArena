@@ -138,7 +138,11 @@ def run_recommend_node(
                 except Exception:  # noqa: BLE001
                     current_tags = []
         candidates = recommend_problems(
-            conn, weak_tags=weak, limit=3, current_tags=current_tags
+            conn,
+            weak_tags=weak,
+            limit=3,
+            current_tags=current_tags,
+            current_problem_id=pid or None,
         )
     finally:
         conn.close()

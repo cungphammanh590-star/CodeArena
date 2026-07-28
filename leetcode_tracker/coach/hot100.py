@@ -48,23 +48,7 @@ def accepted_problem_ids(conn: sqlite3.Connection) -> set[int]:
 
 
 def hot100_progress(conn: sqlite3.Connection) -> dict[str, Any]:
-    catalog = load_hot100()
-    total = len(catalog)
-    solved = accepted_problem_ids(conn)
-    done_ids = [p["id"] for p in catalog if p["id"] in solved]
-    next_unsolved = next((p for p in catalog if p["id"] not in solved), None)
-    by_tag: dict[str, int] = {}
-    for p in catalog:
-        if p["id"] not in solved:
-            continue
-        for tag in p["tags"]:
-            by_tag[tag] = by_tag.get(tag, 0) + 1
-    return {
-        "list_id": "hot100",
-        "done": len(done_ids),
-        "total": total,
-        "ratio": round(len(done_ids) / total, 3) if total else 0.0,
-        "next_unsolved_id": int(next_unsolved["id"]) if next_unsolved else None,
-        "next_unsolved_order": int(next_unsolved["order"]) if next_unsolved else None,
-        "by_tag": by_tag,
-    }
+    """兼容旧名：实际为活跃题单进度（AC only）。"""
+    from leetcode_tracker.coach.catalog import catalog_progress
+
+    return catalog_progress(conn)

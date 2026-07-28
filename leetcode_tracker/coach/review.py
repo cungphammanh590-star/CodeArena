@@ -6,7 +6,9 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
-from leetcode_tracker.coach.hot100 import accepted_problem_ids, hot100_by_id
+from leetcode_tracker.coach.catalog import catalog_by_id, accepted_problem_ids
+from leetcode_tracker.coach.mastered import filter_expand, mastered_problem_ids
+from leetcode_tracker.infra.config import get_learning_config
 from leetcode_tracker.infra.timeutil import china_now
 
 # 参考 leetcode-review-planner：简化阶梯（天）
@@ -25,18 +27,35 @@ def _parse_ts(raw: str | None) -> datetime | None:
         return None
 
 
+def _human_review_reason(age_days: int) -> str:
+    if age_days < 14:
+        return "差不多一周没碰了，温习一下"
+    if age_days < 28:
+        return "半个月没碰了，回顾一下"
+    if age_days < 45:
+        return "快一个月没看了，建议过一遍"
+    return "已经很久没回顾了"
+
+
 def list_review_due(
     conn: sqlite3.Connection,
     *,
     due_after_days: int = DEFAULT_DUE_AFTER_DAYS,
-    limit: int = 20,
+    limit: int = 50,
 ) -> list[dict[str, Any]]:
-    """Hot100 ∩ 已 AC ∩ 距 last_submitted_at/first_accepted_at 超过阈值。"""
-    catalog = hot100_by_id()
+    """活跃题单 ∩ 已 AC ∩ 距 last 超过阈值 ∩ ¬mastered。"""
+    learning = get_learning_config()
+    if not learning.get("list_mode", True):
+        return []
+
+    catalog = catalog_by_id(conn)
     solved = accepted_problem_ids(conn)
+    mastered = mastered_problem_ids(conn)
     now = china_now().replace(tzinfo=None)
     due: list[dict[str, Any]] = []
     for pid in solved:
+        if pid in mastered:
+            continue
         meta = catalog.get(pid)
         if meta is None:
             continue
@@ -64,7 +83,7 @@ def list_review_due(
                 "strategy": "review_due",
                 "age_days": age_days,
                 "struggle_score": float(row["struggle_score"] or 0),
-                "reason": f"复习：已 AC，约 {age_days} 天未再提交（间隔阈值 {due_after_days} 天）",
+                "reason": _human_review_reason(age_days),
                 "url": f"https://leetcode.cn/problems/{meta.get('slug')}/"
                 if meta.get("slug")
                 else f"/problems/{pid}",
@@ -81,10 +100,24 @@ def pick_review_queue(
     limit: int = 3,
     prefer_tags: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """今日复习队列：只返回到期旧题 Top-N。"""
-    due = list_review_due(conn, limit=max(limit * 3, 10))
+    """今日复习队列：过滤 mastered 后扩容。"""
+    mastered = mastered_problem_ids(conn)
+    # 先召回较大池再过滤
+    recall = max(limit, 10)
+    cap = 50
+    due: list[dict[str, Any]] = []
+    while recall <= cap:
+        due = list_review_due(conn, limit=recall)
+        # list_review_due 已排除 mastered；再保险
+        filtered = filter_expand(due, mastered, limit=limit, cap=cap)
+        if len(filtered) >= limit or recall >= cap:
+            due = filtered
+            break
+        recall = min(cap, recall * 2)
+
     if not due:
         return []
+
     prefer = [t for t in (prefer_tags or []) if t]
     picked: list[dict[str, Any]] = []
     picked_ids: set[int] = set()
@@ -113,17 +146,17 @@ def pick_review_queue(
 def format_review_queue(candidates: list[dict[str, Any]]) -> str:
     if not candidates:
         return (
-            "今天没有到期的复习题（Hot100 已 AC 且超过固定间隔未再提交）。"
+            "今天没有特别需要复习的旧题。"
             "可以去做「推荐下一题」练新题，或过几天再来。"
         )
-    lines = ["今日复习队列（只含已 AC 旧题，固定间隔 MVP）："]
+    lines = ["今日复习："]
     for i, c in enumerate(candidates, 1):
         pid = c.get("problem_id") or c.get("id")
         title = c.get("title") or ""
         diff = c.get("difficulty") or ""
         reason = c.get("reason") or ""
         url = c.get("url") or f"/problems/{pid}"
-        lines.append(f"{i}. 📚 {pid}. {title}（{diff}）— {reason}")
+        lines.append(f"{i}. {pid}. {title}（{diff}）— {reason}")
         lines.append(f"   链接：{url}")
     return "\n".join(lines)
 

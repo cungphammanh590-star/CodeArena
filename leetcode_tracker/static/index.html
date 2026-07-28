@@ -6,21 +6,25 @@
   <title>LeetCode Tracker</title>
   <style>
     :root {
-      --bg: #f4f1eb;
-      --ink: #1c1917;
-      --muted: #78716c;
-      --card: #fffcf7;
-      --line: #e7e5e4;
-      --ok: #15803d;
-      --accent: #0f766e;
+      --bg: #f7f1ef;
+      --ink: #3f3a38;
+      --muted: #948984;
+      --card: #fffbf9;
+      --line: #eadfd9;
+      --ok: #6d9f82;
+      --accent: #c67a88;
+      --wash-mint: #d8ebe3;
+      --wash-blush: #f3d6d1;
+      --soft: #f3e9e6;
+      --accent-soft: #f4e0e4;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "IBM Plex Sans", "Noto Sans SC", system-ui, sans-serif;
       background:
-        radial-gradient(1200px 500px at 10% -10%, #d9f3ef 0%, transparent 55%),
-        radial-gradient(900px 400px at 100% 0%, #fde68a55 0%, transparent 50%),
+        radial-gradient(1200px 500px at 10% -10%, var(--wash-mint) 0%, transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, #f3d6d166 0%, transparent 50%),
         var(--bg);
       color: var(--ink);
       min-height: 100vh;
@@ -29,14 +33,244 @@
       padding: 28px 24px 8px;
       max-width: 960px;
       margin: 0 auto;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
     }
+    .header-main { min-width: 0; flex: 1; }
     h1 {
       margin: 0;
       font-size: 28px;
       letter-spacing: -0.03em;
     }
     .sub { color: var(--muted); margin-top: 6px; font-size: 14px; }
+    .header-actions {
+      position: relative;
+      flex-shrink: 0;
+      padding-top: 4px;
+    }
+    .prefs-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 7px 12px 7px 10px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: 0 1px 0 rgba(28, 25, 23, 0.04);
+    }
+    .prefs-trigger:hover {
+      border-color: #e2b6be;
+      color: var(--accent);
+    }
+    .prefs-trigger[aria-expanded="true"] {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .prefs-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #cbd5e1;
+      flex-shrink: 0;
+    }
+    .prefs-dot.on { background: var(--accent); }
+    .prefs-chevron {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1;
+    }
+    .prefs-panel {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: min(340px, calc(100vw - 32px));
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 18px 40px rgba(28, 25, 23, 0.12);
+      padding: 14px;
+      z-index: 40;
+    }
+    .prefs-panel.open { display: block; }
+    .prefs-panel h3 {
+      margin: 0 0 4px;
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .prefs-hint {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .prefs-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .prefs-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .prefs-toggle:hover { border-color: #e2b6be; }
+    .prefs-toggle input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      margin: 0;
+    }
+    .prefs-toggle span:first-child { font-weight: 500; }
+    .prefs-field label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .prefs-field select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--ink);
+    }
+    .prefs-progress {
+      margin: 10px 0 0;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: var(--accent-soft);
+      color: #9a5563;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .prefs-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .prefs-footer .btn-primary {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 10px;
+      padding: 8px 28px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .prefs-footer .btn-primary:hover { filter: brightness(0.95); }
+    .prefs-msg {
+      min-height: 16px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .prefs-msg.ok { color: var(--ok); }
+    .prefs-msg.err { color: #d4a06a; }
+    .prefs-divider {
+      height: 1px;
+      background: var(--line);
+      margin: 14px 0 12px;
+    }
+    .prefs-mastered > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .prefs-mastered > summary::-webkit-details-marker { display: none; }
+    .prefs-mastered > summary .hint {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .prefs-mastered[open] > summary { margin-bottom: 8px; }
+    .prefs-mastered-list {
+      max-height: 180px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .prefs-mastered-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      font-size: 12px;
+    }
+    .prefs-mastered-item .title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .prefs-mastered-empty {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
     main { max-width: 960px; margin: 0 auto; padding: 12px 24px 40px; }
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .section-head h2 { margin: 0; }
+    .section-meta { font-size: 12px; color: var(--muted); }
+    .action-btn {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .action-btn:hover {
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .reason-cell {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+      max-width: 280px;
+    }
     .day-nav {
       display: flex;
       flex-wrap: wrap;
@@ -130,25 +364,45 @@
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
     th { color: var(--muted); font-weight: 500; }
     .ok { color: var(--ok); }
-    .fail { color: #b45309; }
+    .fail { color: #d4a06a; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .link-title { font-weight: 500; }
-    .bars { display: flex; gap: 8px; align-items: flex-end; height: 90px; }
+    .bars {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      height: 96px;
+      margin-bottom: 4px;
+      padding: 4px 2px 22px;
+      border-radius: 12px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, transparent 70%),
+        var(--soft);
+    }
     .bar {
       flex: 1;
-      background: #99f6e4;
-      border-radius: 8px 8px 2px 2px;
+      background: #e2c4c0;
+      border-radius: 7px 7px 3px 3px;
       min-height: 4px;
       position: relative;
       cursor: pointer;
+      transition: background 0.15s ease, transform 0.15s ease;
     }
-    .bar:hover { background: #5eead4; }
-    .bar.active { background: #0f766e; }
-    .bar.active span { color: var(--ink); font-weight: 600; }
+    .bar:hover {
+      background: #d4a8a4;
+      transform: translateY(-1px);
+    }
+    .bar.active {
+      background: var(--accent);
+    }
+    .bar.active span {
+      color: var(--ink);
+      font-weight: 600;
+    }
     .bar span {
       position: absolute;
-      bottom: -18px;
+      bottom: -20px;
       left: 0;
       right: 0;
       text-align: center;
@@ -158,14 +412,57 @@
     #status { font-size: 12px; color: var(--muted); }
     @media (max-width: 800px) {
       .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      header { flex-wrap: wrap; }
+      .header-actions { margin-left: auto; }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>LeetCode Tracker</h1>
-    <div class="sub"><span id="status">加载中…</span>
-      · <a href="/ops">维护台</a>
+    <div class="header-main">
+      <h1>LeetCode Tracker</h1>
+      <div class="sub"><span id="status">加载中…</span>
+        · <a href="/ops">维护台</a>
+      </div>
+    </div>
+    <div class="header-actions" id="prefs-root">
+      <button type="button" class="prefs-trigger" id="prefs-trigger" aria-expanded="false" aria-controls="prefs-panel">
+        <span class="prefs-dot" id="prefs-dot" aria-hidden="true"></span>
+        <span id="prefs-trigger-label">学习偏好</span>
+        <span class="prefs-chevron" aria-hidden="true">▾</span>
+      </button>
+      <div class="prefs-panel" id="prefs-panel" role="dialog" aria-label="学习偏好">
+        <h3>学习偏好</h3>
+        <p class="prefs-hint">题单负责主路径推荐与复习；知识图谱补充相近知识点。导入自定义题单请到维护台。</p>
+        <div class="prefs-row">
+          <label class="prefs-toggle">
+            <span>题单模式</span>
+            <input type="checkbox" id="learn-list-mode" />
+          </label>
+          <label class="prefs-toggle">
+            <span>知识图谱模式</span>
+            <input type="checkbox" id="learn-kg-mode" />
+          </label>
+        </div>
+        <div class="prefs-field">
+          <label for="learn-active-list">活跃题单</label>
+          <select id="learn-active-list"></select>
+        </div>
+        <p class="prefs-progress" id="learn-progress">—</p>
+        <div class="prefs-footer">
+          <button type="button" class="btn-primary" id="btn-learn-save">保存</button>
+        </div>
+        <div class="prefs-msg" id="learn-msg"></div>
+        <div class="prefs-divider"></div>
+        <details class="prefs-mastered" id="mastered-box">
+          <summary>
+            <span>已掌握</span>
+            <span class="hint" id="mastered_summary">0</span>
+          </summary>
+          <div class="prefs-mastered-list" id="mastered_list"></div>
+          <p class="prefs-mastered-empty" id="mastered_empty">暂无 · 可在题目详情页标记</p>
+        </details>
+      </div>
     </div>
   </header>
   <main>
@@ -187,6 +484,18 @@
     <section>
       <h2>近 7 日</h2>
       <div class="bars" id="bars"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>今日复习</h2>
+        <span class="section-meta" id="review_count"></span>
+      </div>
+      <table>
+        <thead><tr><th>题目</th><th>难度</th><th>为什么复习</th></tr></thead>
+        <tbody id="review_due"></tbody>
+      </table>
+      <p class="sub" id="review_empty" style="display:none;margin:0;color:var(--muted);font-size:13px">今天没有到期复习题</p>
     </section>
 
     <section>
@@ -605,9 +914,168 @@
 
     syncDayControls();
     refresh({ reloadProblems: true });
+    loadLearningPanel();
     setInterval(() => {
       if (isViewingToday()) refresh();
     }, 3000);
+
+    async function loadLearningPanel() {
+      const msg = document.getElementById("learn-msg");
+      msg.className = "prefs-msg";
+      try {
+        const [learnRes, reviewRes, masteredRes] = await Promise.all([
+          fetch("/api/learning"),
+          fetch("/api/review/today"),
+          fetch("/api/mastered"),
+        ]);
+        const learn = await learnRes.json();
+        const review = await reviewRes.json();
+        const mastered = await masteredRes.json();
+
+        if (learn.status === "ok") {
+          const L = learn.learning || {};
+          document.getElementById("learn-list-mode").checked = !!L.list_mode;
+          document.getElementById("learn-kg-mode").checked = !!L.kg_mode;
+          const sel = document.getElementById("learn-active-list");
+          sel.innerHTML = "";
+          (learn.lists || []).forEach((item) => {
+            const opt = document.createElement("option");
+            opt.value = item.id;
+            opt.textContent =
+              item.name + " · " + item.total + " 题";
+            if (item.active) opt.selected = true;
+            sel.appendChild(opt);
+          });
+          const p = learn.progress || {};
+          let prog = "进度 " + (p.done || 0) + "/" + (p.total || 0) + "（仅计 AC）";
+          if (p.mastered_count) {
+            prog += " · 已掌握屏蔽 " + p.mastered_count + " 题";
+          }
+          document.getElementById("learn-progress").textContent = prog;
+
+          const modesOn = !!L.list_mode || !!L.kg_mode;
+          document.getElementById("prefs-dot").classList.toggle("on", modesOn);
+          document.getElementById("prefs-trigger-label").textContent = "学习偏好";
+        }
+
+        const tbody = document.getElementById("review_due");
+        const empty = document.getElementById("review_empty");
+        const due = (review && review.due) || [];
+        document.getElementById("review_count").textContent = due.length
+          ? due.length + " 题到期"
+          : "";
+        if (!due.length) {
+          tbody.innerHTML = "";
+          empty.style.display = "block";
+        } else {
+          empty.style.display = "none";
+          tbody.innerHTML = due
+            .map((c) => {
+              const pid = c.problem_id || c.id;
+              return (
+                "<tr><td>" +
+                problemLink(pid, c.title) +
+                "</td><td>" +
+                (c.difficulty || "-") +
+                '</td><td class="reason-cell">' +
+                (c.reason || "") +
+                "</td></tr>"
+              );
+            })
+            .join("");
+        }
+
+        const mt = document.getElementById("mastered_list");
+        const me = document.getElementById("mastered_empty");
+        const items = (mastered && mastered.items) || [];
+        document.getElementById("mastered_summary").textContent = items.length
+          ? items.length + " 题"
+          : "0";
+        if (!items.length) {
+          mt.innerHTML = "";
+          me.style.display = "block";
+        } else {
+          me.style.display = "none";
+          mt.innerHTML = items
+            .map((c) => {
+              const title =
+                (c.problem_id || "") +
+                ". " +
+                (c.title || "#" + c.problem_id);
+              return (
+                '<div class="prefs-mastered-item">' +
+                '<a class="title" href="/problems/' +
+                c.problem_id +
+                '">' +
+                title +
+                "</a>" +
+                '<button type="button" class="action-btn" data-unmaster="' +
+                c.problem_id +
+                '">取消掌握</button></div>'
+              );
+            })
+            .join("");
+          mt.querySelectorAll("button[data-unmaster]").forEach((btn) => {
+            btn.onclick = async (e) => {
+              e.stopPropagation();
+              const pid = btn.getAttribute("data-unmaster");
+              btn.disabled = true;
+              await fetch("/api/problems/" + pid + "/mastered", {
+                method: "DELETE",
+              });
+              loadLearningPanel();
+            };
+          });
+        }
+      } catch (err) {
+        msg.textContent = "加载失败：" + err;
+        msg.className = "prefs-msg err";
+      }
+    }
+
+    const prefsTrigger = document.getElementById("prefs-trigger");
+    const prefsPanel = document.getElementById("prefs-panel");
+    const prefsRoot = document.getElementById("prefs-root");
+
+    function setPrefsOpen(open) {
+      prefsPanel.classList.toggle("open", open);
+      prefsTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    prefsTrigger.onclick = (e) => {
+      e.stopPropagation();
+      setPrefsOpen(!prefsPanel.classList.contains("open"));
+    };
+    document.addEventListener("click", (e) => {
+      if (!prefsRoot.contains(e.target)) setPrefsOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") setPrefsOpen(false);
+    });
+
+    document.getElementById("btn-learn-save").onclick = async () => {
+      const msg = document.getElementById("learn-msg");
+      msg.className = "prefs-msg";
+      try {
+        const res = await fetch("/api/learning", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            list_mode: document.getElementById("learn-list-mode").checked,
+            kg_mode: document.getElementById("learn-kg-mode").checked,
+            active_list_id: document.getElementById("learn-active-list").value,
+          }),
+        });
+        const data = await res.json();
+        if (data.status !== "ok") throw new Error(data.message || "failed");
+        msg.textContent = "已保存";
+        msg.className = "prefs-msg ok";
+        await loadLearningPanel();
+      } catch (err) {
+        msg.textContent = String(err);
+        msg.className = "prefs-msg err";
+      }
+    };
   </script>
 </body>
 </html>

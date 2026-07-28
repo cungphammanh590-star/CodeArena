@@ -8,6 +8,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
+from leetcode_tracker.coach.mastered import is_mastered
 from leetcode_tracker.infra.db import init_db
 from leetcode_tracker.core.problem_stats import (
     ensure_stats_materialized,
@@ -77,6 +78,7 @@ def api_problem_stats(problem_id: int) -> Any:
                 return JSONResponse(
                     status_code=404, content={"status": "error", "message": "not found"}
                 )
+            row["mastered"] = is_mastered(conn, problem_id)
             daily = get_daily_stats_rows(conn, problem_id, limit=90)
             submissions = get_problem_submissions(conn, problem_id, limit=80)
             return {"problem": row, "daily": daily, "submissions": submissions}
