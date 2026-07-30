@@ -3,6 +3,9 @@
 完全本地的 **leetcode.cn** 刷题追踪助手（**v0.3.4**）。  
 在力扣正常提交后，浏览器扩展把记录写到本机；可选 AI 陪练帮你复盘。**刷题数据不出本机。**
 
+> **版本线**：轻量本地能力以 Release [`v0.3.4`](https://github.com/cungphammanh590-star/leetcode-tracker/releases/tag/v0.3.4) / 维护支 [`local-stable`](https://github.com/cungphammanh590-star/leetcode-tracker/tree/local-stable) 为准（只修缺陷）。  
+> 本支 `main` 将继续演进可选的云端「智能教练」；只需本地轻量版请安装 `v0.3.4` 或跟踪 `local-stable`。
+
 不限定操作系统：只要本机能跑 **Python 3.9+**，并用 **Chrome / Edge**（或同内核浏览器）加载扩展即可。
 
 ---
