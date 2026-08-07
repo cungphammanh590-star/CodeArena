@@ -10,6 +10,9 @@ from app.coach.confirm import (
     CHOICE_IN_PROBLEM,
     CHOICE_META,
     CHOICE_NEW,
+    CHOICE_PLAN_DP,
+    CHOICE_PLAN_GOOGLE,
+    CHOICE_PLAN_HOT100,
     CHOICE_STATUS,
 )
 from app.coach.phases import SmartIntent
@@ -62,6 +65,56 @@ _META = (
     "你是谁",
     "帮助",
     "功能",
+)
+_PLAN_CREATE_MARKERS = (
+    "备考",
+    "面试",
+    "题单",
+    "打卡",
+    "系统刷",
+    "专攻",
+    "刷题计划",
+    "学习计划",
+    "生成计划",
+    "制定计划",
+)
+_COMPANIES = (
+    "google",
+    "谷歌",
+    "meta",
+    "facebook",
+    "amazon",
+    "亚马逊",
+    "microsoft",
+    "微软",
+    "apple",
+    "苹果",
+)
+_TOPICS = (
+    "动态规划",
+    "dp",
+    "链表",
+    "二叉树",
+    "二分",
+    "图论",
+    "回溯",
+    "滑动窗口",
+    "栈",
+    "队列",
+    "堆",
+)
+_PLAN_ADJUST = (
+    "加班",
+    "明天补",
+    "延期",
+    "推迟",
+    "暂停计划",
+    "恢复计划",
+    "加速",
+)
+_TIMEBOX = re.compile(
+    r"(\d+)\s*天|两周|一周|一个月|(\d+)\s*周",
+    re.I,
 )
 _FULL_ANSWER = (
     "完整代码",
@@ -142,11 +195,36 @@ def _match_confirm_choice(text: str) -> SmartIntent | None:
         (CHOICE_IN_PROBLEM, "in_problem_help"),
         (CHOICE_META, "meta_product"),
         (CHOICE_BACK, "meta_product"),
+        (CHOICE_PLAN_GOOGLE, "plan_create"),
+        (CHOICE_PLAN_DP, "plan_create"),
+        (CHOICE_PLAN_HOT100, "plan_create"),
     ]
     for phrase, intent in mapping:
         if t == phrase or t.endswith(phrase):
             return intent
     return None
+
+
+def _looks_like_plan_create(text: str) -> tuple[bool, float]:
+    """返回 (是否像建计划, 置信度)。集合信号 + 目标槽。"""
+    t = (text or "").strip()
+    if not t:
+        return False, 0.0
+    lower = t.lower()
+    has_marker = any(p in t for p in _PLAN_CREATE_MARKERS) or bool(_TIMEBOX.search(t))
+    has_company = any(c in lower for c in _COMPANIES)
+    has_topic = any(p.lower() in lower if p.isascii() else p in t for p in _TOPICS)
+    has_list = "hot100" in lower or "hot 100" in lower or "热题" in t
+    has_goal = has_company or has_topic or has_list
+    if has_marker and has_goal:
+        return True, 0.9
+    if has_marker and _TIMEBOX.search(t):
+        return True, 0.7  # 有时间盒但目标不清 → 可能 confirm
+    if ("面试" in t or "备考" in t) and has_company:
+        return True, 0.88
+    if ("系统刷" in t or "专攻" in t or "题单" in t) and has_topic:
+        return True, 0.88
+    return False, 0.0
 
 
 def classify_smart_intent(
@@ -181,6 +259,16 @@ def classify_smart_intent(
         x in t for x in ("题", "刷", "leetcode", "力扣", "算法", "链表", "树", "动态规划")
     ):
         return "off_topic", 0.85
+
+    # 计划族：须压在 practice_new / status 之前
+    if any(p in t for p in _PLAN_ADJUST) and ("计划" in t or "今天" in t or "明天" in t):
+        return "plan_adjust", 0.85
+    plan_ok, plan_conf = _looks_like_plan_create(t)
+    if plan_ok:
+        return "plan_create", plan_conf
+    if any(p in t for p in ("今天刷什么", "今日任务", "计划进度", "还剩几天")):
+        return "plan_status", 0.85
+
     if any(p in t for p in _META) and len(t) < 40:
         return "meta_product", 0.8
     if any(p in t for p in _STATUS):
@@ -214,6 +302,10 @@ def intent_to_phase(
     kind = session_kind or "lobby"
     if kind == "topic" and intent == "status_review":
         return "today_brief"
+    if intent in {"plan_create", "plan_adjust"}:
+        return "plan_active"
+    if intent == "plan_status":
+        return "today_brief"
     if bound and intent in {
         "in_problem_help",
         "want_full_answer",
@@ -229,6 +321,9 @@ def intent_to_phase(
         "off_topic": "lobby",
         "want_full_answer": "in_problem" if bound else "prep",
         "clarify": "lobby" if kind != "topic" else "today_brief",
+        "plan_create": "plan_active",
+        "plan_status": "today_brief",
+        "plan_adjust": "plan_active",
     }
     return mapping.get(intent, "lobby")
 
@@ -236,13 +331,15 @@ def intent_to_phase(
 def should_reclassify(*, phase: str, turn_count: int, user_text: str) -> bool:
     if turn_count <= 1:
         return True
-    if phase in {"lobby", "today_brief", "prep", "wrap"}:
+    if phase in {"lobby", "today_brief", "prep", "wrap", "plan_active"}:
         return True
     t = user_text or ""
     if _match_confirm_choice(t) is not None:
         return True
     if injection_suspect(t):
         return True
-    if any(p in t for p in _OFF_TOPIC + _STATUS + _NEW + _CONTINUE + _META):
+    if any(p in t for p in _OFF_TOPIC + _STATUS + _NEW + _CONTINUE + _META + _PLAN_CREATE_MARKERS + _PLAN_ADJUST):
+        return True
+    if _looks_like_plan_create(t)[0]:
         return True
     return False

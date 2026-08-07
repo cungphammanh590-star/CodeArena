@@ -85,7 +85,9 @@ export const useCoachStore = defineStore("coach", () => {
     const query = submissionId
       ? `submission_id=${encodeURIComponent(submissionId)}`
       : `problem_id=${encodeURIComponent(pid || "")}`;
-    const res = await fetch(`/api/coach/session?${query}`);
+    const res = await fetch(`/api/coach/session?${query}`, {
+      headers: userHeaders(),
+    });
     if (!res.ok) return null;
     return res.json();
   }
@@ -107,7 +109,7 @@ export const useCoachStore = defineStore("coach", () => {
       if (mode) body.mode = mode;
       const res = await fetch("/api/coach/prepare", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: userHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -165,7 +167,9 @@ export const useCoachStore = defineStore("coach", () => {
   }
 
   async function loadHint(pid: string) {
-    const res = await fetch(`/api/coach/hint/${encodeURIComponent(pid)}`);
+    const res = await fetch(`/api/coach/hint/${encodeURIComponent(pid)}`, {
+      headers: userHeaders(),
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "hint failed");
     if (data.latest_submission_id) {

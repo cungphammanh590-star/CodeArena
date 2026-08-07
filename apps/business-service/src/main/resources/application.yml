@@ -82,5 +82,7 @@ codearena:
     # /health 探测陪练进程（前端 coach_available）
     base-url: ${CODEARENA_LLM_URI:http://127.0.0.1:8091}
   auth:
-    # Bearer token 有效期（天）
+    # JWT 有效期（天）；Gateway / business 共用同一密钥
     token-ttl-days: ${CODEARENA_AUTH_TOKEN_TTL_DAYS:30}
+    jwt-secret: ${CODEARENA_JWT_SECRET:codearena-dev-jwt-secret-change-me-32b}
+    jwt-issuer: ${CODEARENA_JWT_ISSUER:codearena}

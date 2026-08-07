@@ -105,6 +105,39 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "sync_web_auth") {
+    (async () => {
+      const token = message.token || "";
+      if (!token) {
+        await saveConfig({ accessToken: "", userPublicId: "", userDisplay: "" });
+        sendResponse({ ok: true, cleared: true });
+        return;
+      }
+      const local = applyTokenLocally(token);
+      if (!local) {
+        sendResponse({ ok: false, error: "invalid jwt" });
+        return;
+      }
+      const user = message.user || {};
+      await saveConfig({
+        accessToken: local.accessToken,
+        userPublicId: user.public_id || local.userPublicId,
+        userDisplay:
+          user.display_name || user.username || local.userDisplay,
+      });
+      // 后台再校验一次
+      await ensureAuth();
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+
+  if (message.type === "request_web_auth_pull") {
+    // content script 收到后由页面脚本响应；此处仅确认通道
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (message.type === "get_api_health") {
     (async () => {
       const cfg = await getConfig();

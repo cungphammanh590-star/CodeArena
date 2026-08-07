@@ -14,6 +14,9 @@
 | `get_topic_mastery` | READ | **Java** | 按标签聚合 |
 | `get_problem_mastery` | READ | **Java** | 单题掌握 |
 | `suggest_next_problems` | READ | **Java** | 续刷/新荐候选 |
+| `generate_study_plan` | WRITE | **Java** | 按目标生成题单 ± 多日日程（company/topic/list） |
+| `get_today_tasks` | READ | **Java** | 今日计划任务 |
+| `get_active_plan` | READ | **Java** | 进行中计划摘要 |
 | `recall_memories` | READ | **Java** | 跨会话长期记忆 |
 | `remember` | WRITE | **Java** | 写入长期记忆 |
 | `forget_memory` | WRITE | **Java** | 软删长期记忆 |
@@ -106,3 +109,4 @@ Content-Type: application/json
 
 - 业务流：[BUSINESS_FLOW.md](./BUSINESS_FLOW.md) — stream 在 Python；工具与 Key 在 Java
 - 记忆三层：[COACH_MEMORY.md](./COACH_MEMORY.md) — checkpoint / sessions / long-term
+- 面试备考 / 专题计划工具与意图扩充：[COACH_PLAN_AGENT.md](./COACH_PLAN_AGENT.md)（`generate_study_plan` 等 **P0 已落地**）

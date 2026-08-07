@@ -40,16 +40,42 @@ export function setAccessToken(token: string) {
 export function clearAuth() {
   setAccessToken("");
   setUserPublicId("");
+  notifyExtensionAuthClear();
 }
 
-/** 请求头：Bearer 优先；兼容旧的 X-User-Public-Id。 */
+/** 请求头：JWT Bearer（Gateway 校验）。 */
 export function userHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = { ...extra };
   const token = getAccessToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const uid = getUserPublicId();
-  if (uid) headers["X-User-Public-Id"] = uid;
   return headers;
+}
+
+function notifyExtensionAuth(token: string, user?: Record<string, unknown> | null) {
+  try {
+    window.postMessage(
+      {
+        source: "codearena",
+        type: "auth_sync",
+        token,
+        user: user || null,
+      },
+      window.location.origin,
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function notifyExtensionAuthClear() {
+  try {
+    window.postMessage(
+      { source: "codearena", type: "auth_clear" },
+      window.location.origin,
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 export const api = axios.create({
@@ -65,10 +91,6 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  const uid = getUserPublicId();
-  if (uid) {
-    config.headers["X-User-Public-Id"] = uid;
-  }
   return config;
 });
 
@@ -83,25 +105,78 @@ api.interceptors.response.use((resp) => {
   return resp;
 });
 
+export async function loginWithPassword(username: string, password: string) {
+  const { data } = await api.post("/auth/login", {
+    username,
+    password,
+    client: "web",
+  });
+  const token = data.access_token as string;
+  setAccessToken(token);
+  const user = data.user || {};
+  if (user.public_id) setUserPublicId(user.public_id);
+  notifyExtensionAuth(token, user);
+  return data;
+}
+
+export async function registerWithPassword(
+  username: string,
+  password: string,
+  displayName?: string,
+) {
+  const { data } = await api.post("/auth/register", {
+    username,
+    password,
+    display_name: displayName || username,
+  });
+  const token = data.access_token as string;
+  setAccessToken(token);
+  const user = data.user || {};
+  if (user.public_id) setUserPublicId(user.public_id);
+  notifyExtensionAuth(token, user);
+  return data;
+}
+
+export async function logoutRemote() {
+  try {
+    if (getAccessToken()) {
+      await api.post("/auth/logout");
+    }
+  } catch {
+    /* ignore */
+  } finally {
+    clearAuth();
+  }
+}
+
+export async function fetchMe() {
+  const { data } = await api.get("/auth/me");
+  const user = data?.user;
+  if (user?.public_id) setUserPublicId(user.public_id);
+  return data;
+}
+
 /**
- * 扩展登录后会带 ?ext_token=ca_… 打开 Web；写入 localStorage 并校验 /auth/me。
+ * 扩展登录后会带 ?ext_token=<JWT>；写入 localStorage 并同步回扩展。
  */
 export async function consumeExtensionTokenFromUrl(): Promise<boolean> {
   try {
     const url = new URL(window.location.href);
     const extToken = url.searchParams.get("ext_token");
-    if (!extToken) return Boolean(getAccessToken());
+    if (extToken) {
+      setAccessToken(extToken);
+      url.searchParams.delete("ext_token");
+      const clean = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", clean || "/");
+    }
 
-    setAccessToken(extToken);
-    url.searchParams.delete("ext_token");
-    const clean = `${url.pathname}${url.search}${url.hash}`;
-    window.history.replaceState({}, "", clean || "/");
+    const token = getAccessToken();
+    if (!token) return false;
 
     const { data } = await api.get("/auth/me");
     const user = data?.user;
-    if (user?.public_id) {
-      setUserPublicId(user.public_id);
-    }
+    if (user?.public_id) setUserPublicId(user.public_id);
+    notifyExtensionAuth(token, user || null);
     return true;
   } catch {
     clearAuth();

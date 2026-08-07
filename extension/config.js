@@ -1,14 +1,11 @@
 /**
- * 扩展共享配置。服务地址由产品内置，不对用户开放配置。
- * 鉴权：服务端签发的 Bearer 会话令牌（ca_…），存 chrome.storage.local，全扩展共享。
+ * 扩展共享配置。服务经 Gateway；鉴权为 JWT（Bearer）。
  */
 "use strict";
 
-// 产品内置入口（发版时改这里；用户界面不可改）
 const API_BASE = "http://127.0.0.1:8080";
 const WEB_BASE = "http://127.0.0.1:5173";
 
-// 兼容旧脚本引用
 const DEFAULT_API_BASE = API_BASE;
 const DEFAULT_WEB_BASE = WEB_BASE;
 
@@ -17,6 +14,32 @@ const STORAGE_KEYS = {
   userPublicId: "userPublicId",
   userDisplay: "userDisplay",
 };
+
+function parseJwtPayload(token) {
+  try {
+    if (!token || typeof token !== "string") return null;
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const json = atob(b64 + pad);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function userFromJwt(token) {
+  const p = parseJwtPayload(token);
+  if (!p) return null;
+  const exp = Number(p.exp || 0);
+  if (exp && exp * 1000 < Date.now()) return null;
+  return {
+    public_id: p.sub || "",
+    username: p.username || "",
+    display_name: p.display_name || p.username || "",
+  };
+}
 
 async function getConfig() {
   const stored = await chrome.storage.local.get([
@@ -48,6 +71,16 @@ async function saveConfig(partial) {
   }
 }
 
+function applyTokenLocally(token) {
+  const user = userFromJwt(token);
+  if (!user) return null;
+  return {
+    accessToken: token,
+    userPublicId: user.public_id,
+    userDisplay: user.display_name || user.username || user.public_id,
+  };
+}
+
 function friendlyError(err) {
   const status = err && err.status;
   const raw = String((err && err.message) || err || "").trim();
@@ -55,9 +88,6 @@ function friendlyError(err) {
   if (status === 401) {
     if (/失效|请先登录|expired|invalid token|unauthorized/.test(lower) && !/password|密码/.test(lower)) {
       return "登录已失效，请重新登录";
-    }
-    if (/用户名或密码|invalid credentials/.test(lower)) {
-      return "用户名或密码不正确";
     }
     return "用户名或密码不正确";
   }
@@ -128,21 +158,33 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-/**
- * 校验已有登录态。
- * - 无 token → false
- * - 401 → 清 token，false
- * - 网络/5xx → 保留 token，仍视为已登录（避免误清导致弹窗不同步）
- */
+/** 校验 JWT：优先本地解析；在线时再打 /api/auth/me。 */
 async function ensureAuth() {
   const cfg = await getConfig();
   if (!cfg.accessToken) return false;
+
+  const local = applyTokenLocally(cfg.accessToken);
+  if (!local) {
+    await saveConfig({ accessToken: "", userPublicId: "", userDisplay: "" });
+    return false;
+  }
+  // 先写入 JWT claims，保证弹窗立刻能显示用户
+  if (
+    local.userPublicId !== cfg.userPublicId ||
+    local.userDisplay !== cfg.userDisplay
+  ) {
+    await saveConfig({
+      userPublicId: local.userPublicId,
+      userDisplay: local.userDisplay,
+    });
+  }
+
   try {
     const me = await apiFetch("/api/auth/me");
     const user = me.user || {};
     await saveConfig({
-      userPublicId: user.public_id || cfg.userPublicId,
-      userDisplay: user.display_name || user.username || cfg.userDisplay,
+      userPublicId: user.public_id || local.userPublicId,
+      userDisplay: user.display_name || user.username || local.userDisplay,
     });
     return true;
   } catch (e) {
@@ -151,12 +193,12 @@ async function ensureAuth() {
       await saveConfig({ accessToken: "", userPublicId: "", userDisplay: "" });
       return false;
     }
-    // 短暂网络失败：保留本地登录态，扩展仍可显示已登录
+    // 网络异常：JWT 未过期则仍视为已登录
     return true;
   }
 }
 
 async function isLoggedIn() {
   const cfg = await getConfig();
-  return Boolean(cfg.accessToken);
+  return Boolean(cfg.accessToken && applyTokenLocally(cfg.accessToken));
 }

@@ -38,11 +38,14 @@ com.codearena.business.user
 
 ## 当前用户如何解析
 
-`CurrentUserService`：
+`CurrentUserService`（业务侧）：
 
-1. `Authorization: Bearer ca_…` → `auth_sessions`  
-2. 请求头 `X-User-Public-Id` → 对应用户（开发兼容）  
+1. `Authorization: Bearer <JWT>` → 验签 + `auth_sessions`（按 `jti`）未吊销  
+2. 开发兼容：`X-User-Public-Id`  
 3. 否则 → `ensureDefaultUser()`
+
+**Gateway**（`JwtAuthGlobalFilter`）对非公开路径强制校验 JWT，并注入可信头 `X-User-Public-Id` / `X-User-Id`。  
+公开路径：`/health`、`/api/auth/login|register|device`。
 
 接入更多 OAuth 时仍只改本类 + `user_identities`。Learning / Submit / Stats 已依赖它。
 
@@ -50,14 +53,13 @@ com.codearena.business.user
 
 | Method | Path | 说明 |
 |--------|------|------|
-| POST | `/api/auth/device` | 扩展设备静默登录 `{device_id}` |
-| POST | `/api/auth/register` | 注册 `{username,password,display_name?}` |
-| POST | `/api/auth/login` | 登录 |
-| POST | `/api/auth/logout` | 吊销当前 token |
-| GET | `/api/auth/me` | 当前用户 |
+| POST | `/api/auth/device` | 扩展设备静默登录 `{device_id}`（公开） |
+| POST | `/api/auth/register` | 注册（公开），返回 JWT |
+| POST | `/api/auth/login` | 登录（公开），返回 JWT |
+| POST | `/api/auth/logout` | 吊销当前 JWT 的 jti |
+| GET | `/api/auth/me` | 当前用户（需 JWT） |
 
-扩展说明见 [EXTENSION.md](../EXTENSION.md)。
-
+JWT 密钥：`CODEARENA_JWT_SECRET`（Gateway 与 business 共用）。扩展说明见 [EXTENSION.md](../EXTENSION.md)。
 ## API（经 Gateway `/api/users/**`）
 
 | Method | Path | 说明 |

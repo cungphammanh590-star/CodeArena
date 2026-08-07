@@ -162,6 +162,69 @@ JAVA_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "generate_study_plan",
+            "description": (
+                "按用户目标生成刷题题单，并可排多日日程。"
+                "goal_type=company|topic|list；goal_ref=公司名/专题名/题单id（如 Google、动态规划、hot100）。"
+                "用户说了天数则传 days 且 schedule=true；只要题单则 schedule=false。"
+                "不要自行编造长题号列表。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal_type": {
+                        "type": "string",
+                        "description": "company | topic | list",
+                    },
+                    "goal_ref": {
+                        "type": "string",
+                        "description": "目标引用：Google / 动态规划 / hot100 等",
+                    },
+                    "title": {"type": "string", "description": "可选题单标题"},
+                    "days": {"type": "integer", "description": "日程天数 7～90"},
+                    "daily_goal": {"type": "integer", "description": "每日题量 2～5"},
+                    "schedule": {
+                        "type": "boolean",
+                        "description": "是否排多日日程；默认有 days 则为 true",
+                    },
+                    "difficulty": {
+                        "type": "string",
+                        "description": "可选 Easy|Medium|Hard|mixed",
+                    },
+                    "limit": {"type": "integer", "description": "题池上限"},
+                },
+                "required": ["goal_type", "goal_ref"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_today_tasks",
+            "description": "查询当前用户今日刷题计划任务列表。",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_active_plan",
+            "description": "查询进行中的刷题计划摘要（goal、剩余天数、今日题量）。",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "recall_memories",
             "description": "读取用户跨会话长期记忆（偏好/薄弱点/目标/笔记）。开场或选题前可调用。",
             "parameters": {

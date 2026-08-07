@@ -146,3 +146,8 @@ resilience4j:
 logging:
   level:
     org.springframework.cloud.gateway: INFO
+
+codearena:
+  auth:
+    jwt-secret: ${CODEARENA_JWT_SECRET:codearena-dev-jwt-secret-change-me-32b}
+    jwt-issuer: ${CODEARENA_JWT_ISSUER:codearena}

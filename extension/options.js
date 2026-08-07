@@ -42,11 +42,17 @@ async function doLogin() {
       method: "POST",
       body: JSON.stringify({ username, password, client: "extension" }),
     });
+    const token = data.access_token || "";
+    const local = applyTokenLocally(token) || {};
     const user = data.user || {};
     await saveConfig({
-      accessToken: data.access_token || "",
-      userPublicId: user.public_id || "",
-      userDisplay: user.display_name || user.username || "",
+      accessToken: token,
+      userPublicId: user.public_id || local.userPublicId || "",
+      userDisplay:
+        user.display_name ||
+        user.username ||
+        local.userDisplay ||
+        "",
     });
     setStatus("登录成功，正在打开首页…", true);
     passwordInput.value = "";
@@ -70,11 +76,17 @@ async function doRegister() {
       method: "POST",
       body: JSON.stringify({ username, password, display_name: username }),
     });
+    const token = data.access_token || "";
+    const local = applyTokenLocally(token) || {};
     const user = data.user || {};
     await saveConfig({
-      accessToken: data.access_token || "",
-      userPublicId: user.public_id || "",
-      userDisplay: user.display_name || user.username || "",
+      accessToken: token,
+      userPublicId: user.public_id || local.userPublicId || "",
+      userDisplay:
+        user.display_name ||
+        user.username ||
+        local.userDisplay ||
+        "",
     });
     setStatus("注册成功，正在打开首页…", true);
     passwordInput.value = "";

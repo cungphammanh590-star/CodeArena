@@ -1,7 +1,8 @@
 # 陪练 LangGraph 架构特性（当前定义）
 
 本文描述 **CodeArena `llm-service` 当前已实现** 的图、State、Checkpoint 与流转，而非规划草案。  
-相关：记忆三层见 [COACH_MEMORY.md](./COACH_MEMORY.md)；工具边界见 [COACH_TOOLS.md](./COACH_TOOLS.md)。
+相关：记忆三层见 [COACH_MEMORY.md](./COACH_MEMORY.md)；工具边界见 [COACH_TOOLS.md](./COACH_TOOLS.md)；  
+面试备考计划场景的扩充计划见 [COACH_PLAN_AGENT.md](./COACH_PLAN_AGENT.md)（意图 / 图 / 工具，尚未全部落地）。
 
 ---
 

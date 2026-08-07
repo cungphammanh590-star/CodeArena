@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-Phase = Literal["lobby", "today_brief", "prep", "in_problem", "wrap"]
+Phase = Literal["lobby", "today_brief", "prep", "in_problem", "plan_active", "wrap"]
 
 PHASES: tuple[Phase, ...] = (
     "lobby",
     "today_brief",
     "prep",
     "in_problem",
+    "plan_active",
     "wrap",
 )
 
@@ -23,14 +24,18 @@ SmartIntent = Literal[
     "off_topic",
     "want_full_answer",
     "clarify",
+    "plan_create",
+    "plan_status",
+    "plan_adjust",
 ]
 
 ALLOWED_TRANSITIONS: dict[Phase, frozenset[Phase]] = {
     "lobby": frozenset(PHASES),
-    "today_brief": frozenset({"lobby", "prep", "in_problem", "wrap", "today_brief"}),
-    "prep": frozenset({"lobby", "prep", "in_problem", "wrap"}),
-    "in_problem": frozenset({"in_problem", "wrap", "lobby", "prep"}),
-    "wrap": frozenset({"lobby", "prep", "wrap", "in_problem"}),
+    "today_brief": frozenset({"lobby", "prep", "in_problem", "wrap", "today_brief", "plan_active"}),
+    "prep": frozenset({"lobby", "prep", "in_problem", "wrap", "plan_active"}),
+    "in_problem": frozenset({"in_problem", "wrap", "lobby", "prep", "plan_active"}),
+    "plan_active": frozenset({"plan_active", "prep", "in_problem", "today_brief", "wrap", "lobby"}),
+    "wrap": frozenset({"lobby", "prep", "wrap", "in_problem", "plan_active"}),
 }
 
 

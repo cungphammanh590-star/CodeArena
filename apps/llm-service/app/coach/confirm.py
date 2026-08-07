@@ -11,6 +11,9 @@ CHOICE_STATUS = "看看今天刷题进度"
 CHOICE_IN_PROBLEM = "继续帮我看这道题"
 CHOICE_META = "先说明你会做什么"
 CHOICE_BACK = "先回到刷题"
+CHOICE_PLAN_GOOGLE = "请为我生成 Google 面试备考、30天的刷题计划"
+CHOICE_PLAN_DP = "请为我生成动态规划专题、14天的刷题计划"
+CHOICE_PLAN_HOT100 = "请为我按 Hot100 题单生成 21 天打卡计划"
 
 
 def build_confirm_payload(
@@ -19,6 +22,7 @@ def build_confirm_payload(
     phase: str,
     session_kind: str,
     injection_suspect: bool = False,
+    intent: str = "",
 ) -> dict[str, Any]:
     """返回 prompt + choices；choice.text 供前端原样发送。"""
     if injection_suspect:
@@ -33,6 +37,16 @@ def build_confirm_payload(
             {"id": "back", "label": "回到刷题", "text": CHOICE_BACK},
         ]
         return {"prompt": prompt, "choices": choices, "reason": "injection"}
+
+    if intent == "plan_create" or phase == "plan_active":
+        prompt = "想按哪个目标生成刷题计划？选一个（或直接说公司/专题 + 天数）："
+        choices = [
+            {"id": "plan_google", "label": "Google·30天", "text": CHOICE_PLAN_GOOGLE},
+            {"id": "plan_dp", "label": "动态规划·14天", "text": CHOICE_PLAN_DP},
+            {"id": "plan_hot100", "label": "Hot100·21天", "text": CHOICE_PLAN_HOT100},
+            {"id": "status", "label": "今日进度", "text": CHOICE_STATUS},
+        ]
+        return {"prompt": prompt, "choices": choices, "reason": "plan_goal"}
 
     if bound or phase == "in_problem":
         prompt = "我还不太确定你的意图，请选一个下一步："
@@ -53,6 +67,7 @@ def build_confirm_payload(
     choices = [
         {"id": "continue", "label": "续刷未过", "text": CHOICE_CONTINUE},
         {"id": "new", "label": "推荐新题", "text": CHOICE_NEW},
+        {"id": "plan_dp", "label": "生成专题计划", "text": CHOICE_PLAN_DP},
         {"id": "status", "label": "今日进度", "text": CHOICE_STATUS},
         {"id": "meta", "label": "你会做什么", "text": CHOICE_META},
     ]

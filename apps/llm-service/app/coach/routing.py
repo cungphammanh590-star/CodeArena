@@ -53,6 +53,16 @@ def resolve_route(
     if intent == "off_topic":
         return "refuse", "lobby", close_scope
 
+    # 刷题计划：禁止走 offer 单题 CTA
+    if intent == "plan_create":
+        if confidence < CONFIRM_CONFIDENCE_THRESHOLD:
+            return "confirm", "lobby", close_scope
+        return "agent", "plan_active", close_scope
+    if intent == "plan_adjust":
+        return "agent", "plan_active", close_scope
+    if intent == "plan_status":
+        return "agent", "today_brief", close_scope
+
     need_confirm = confidence < CONFIRM_CONFIDENCE_THRESHOLD or intent == "clarify"
     # 已绑题的短句题内帮助：允许略低于阈值直接进 agent
     bound_help_ok = (

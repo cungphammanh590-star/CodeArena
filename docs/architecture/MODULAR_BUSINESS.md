@@ -52,7 +52,7 @@ com.codearena.business/
 | `user` | `/api/users/**` · `/internal/users/**` | `users` + `user_*` | 已实现；见 [USER_DOMAIN.md](./USER_DOMAIN.md) |
 | `problem` | `/api/problems/**` · `/api/stats/**` | `problems` · `problem_stats*` | 已迁入 |
 | `submission` | `/submit` | `submissions` | 已迁入 |
-| `learning.*` | learning / lists / mastered / review | prefs · lists · flags | 已迁入并分子域 |
+| `learning.*` | learning / lists / mastered / review | prefs · lists · flags | 已迁入并分子域；面试计划将做实 `learning.plan`（见 [COACH_PLAN_AGENT.md](./COACH_PLAN_AGENT.md)） |
 | `coach` | `/api/coach/**` · `/internal/tools/**` | 会话编排 + 记忆；stream 在 llm-service | 见 [COACH_TOOLS.md](./COACH_TOOLS.md)、[COACH_MEMORY.md](./COACH_MEMORY.md) |
 | `ops` | `/api/ops/**` | 运维台 | 已迁入 |
 | `team` | `/api/team/**` | `team_*` | 桩 |
