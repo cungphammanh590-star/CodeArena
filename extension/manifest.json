@@ -1,15 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "LeetCode Tracker",
-  "version": "0.3.4",
-  "description": "将 leetcode.cn 提交同步到 LeetCode Tracker。",
+  "name": "CodeArena Tracker",
+    "version": "0.4.2",
+  "description": "登录 CodeArena 后，将 leetcode.cn 提交同步到你的账号并打开陪练。",
   "permissions": ["storage", "alarms", "notifications", "tabs", "activeTab"],
   "host_permissions": [
     "https://leetcode.cn/*",
-    "http://127.0.0.1/*"
+    "http://127.0.0.1:8080/*",
+    "http://localhost:8080/*",
+    "http://127.0.0.1:5173/*",
+    "http://localhost:5173/*"
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {
@@ -31,7 +38,7 @@
     }
   ],
   "action": {
-    "default_title": "LeetCode Tracker",
+    "default_title": "CodeArena",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

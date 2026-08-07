@@ -1,0 +1,33 @@
+# Activate with: --spring.profiles.active=local
+# 本机 Postgres：库 codearena / 用户 codearena / 密码 zephyr
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DB:codearena}
+    username: ${POSTGRES_USER:codearena}
+    password: ${POSTGRES_PASSWORD:zephyr}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+        register-enabled: false
+
+management:
+  health:
+    db:
+      enabled: true
+    redis:
+      enabled: false

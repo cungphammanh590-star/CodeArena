@@ -9,16 +9,55 @@ venv/
 .mypy_cache/
 .python-version
 *.db
+*.sqlite3
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-# Node / OpenSpec 开发工具
+# Java / Maven / Gradle
+target/
+*.class
+*.jar
+*.war
+*.ear
+.gradle/
+build/
+out/
+*.iml
+
+# Node / Vue / frontend
 node_modules/
-package-lock.json
+dist/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 根目录历史 npm 残留（产品前端在 apps/web）
+/package-lock.json
+/package.json
 
 # 构建产物
-dist/
-build/
+/build/
 release/
 *.spec
+
+# Docker
+*.log
+docker-data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
 # macOS
 .DS_Store
@@ -28,13 +67,17 @@ release/
 .githooks/
 openspec/
 package.json
-scripts/
 .build-venv/
 log/
 
 # 本地调试临时目录
 .ignore/
 
-.ruff_cache/
-
+# 历史测试目录忽略（保留）
 tests/
+
+# Helm / secrets
+**/charts/*.tgz
+secrets/
+*.pem
+*.key

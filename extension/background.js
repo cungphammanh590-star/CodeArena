@@ -1,85 +1,40 @@
 "use strict";
 
-const DEFAULT_PORT = 8763;
-let bridgePort = DEFAULT_PORT;
+importScripts("config.js");
 
-console.info("[leetcode-tracker] background loaded", {
+console.info("[codearena] background loaded", {
   version: chrome.runtime.getManifest().version,
 });
 
-async function bridgeBase() {
-  return `http://127.0.0.1:${bridgePort}`;
-}
-
-async function refreshBridge() {
-  try {
-    const response = await fetch(`http://127.0.0.1:${DEFAULT_PORT}/health`);
-    if (!response.ok) return null;
-    const health = await response.json();
-    bridgePort = Number(health.port) || DEFAULT_PORT;
-    return health;
-  } catch (_error) {
-    return null;
-  }
-}
-
 async function postSubmission(payload) {
-  const post = async (port) => {
-    const response = await fetch(`http://127.0.0.1:${port}/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const text = await response.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { message: text };
-    }
-    if (!response.ok) {
-      throw new Error(data.message || `HTTP ${response.status}`);
-    }
-    return data;
-  };
-
-  try {
-    return await post(bridgePort);
-  } catch (firstError) {
-    const health = await refreshBridge();
-    if (!health) throw firstError;
-    return post(bridgePort);
+  const ok = await ensureAuth();
+  if (!ok) {
+    const err = new Error("请先登录账号后再同步提交");
+    err.status = 401;
+    throw err;
   }
+  return apiFetch("/submit", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
-/** /submit 成功之后另一次调用；失败静默，绝不影响采集成功态。 */
 async function prepareCoach(submissionId, problemId) {
   if (!submissionId && !problemId) return;
   try {
-    const response = await fetch(
-      `http://127.0.0.1:${bridgePort}/api/coach/prepare`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submission_id: submissionId ? String(submissionId) : "",
-          problem_id: problemId == null ? null : Number(problemId),
-        }),
-      }
-    );
-    if (!response.ok) {
-      const text = await response.text();
-      console.warn("[leetcode-tracker] prepare skipped", response.status, text);
-      return;
-    }
-    const data = await response.json();
-    console.info("[leetcode-tracker] prepare ok", {
+    if (!(await ensureAuth())) return;
+    const data = await apiFetch("/api/coach/prepare", {
+      method: "POST",
+      body: JSON.stringify({
+        submission_id: submissionId ? String(submissionId) : "",
+        problem_id: problemId == null ? null : Number(problemId),
+      }),
+    });
+    console.info("[codearena] prepare ok", {
       session_id: data.session_id,
-      opening_source: data.opening_source,
-      reused: data.reused,
     });
   } catch (error) {
-    console.warn("[leetcode-tracker] prepare failed (ignored)", String(error));
+    console.warn("[codearena] prepare failed (ignored)", String(error));
   }
 }
 
@@ -88,7 +43,7 @@ async function setBadge(text, color) {
     await chrome.action.setBadgeText({ text });
     await chrome.action.setBadgeBackgroundColor({ color });
   } catch (_error) {
-    // Cosmetic only.
+    // ignore
   }
 }
 
@@ -121,17 +76,17 @@ async function notify(title, message, submissionId, problemId) {
       priority: 1,
     });
   } catch (_error) {
-    // Notification permission or OS state must not affect capture.
+    // ignore
   }
 }
 
 async function openCoachPage(submissionId, problemId) {
-  const base = await bridgeBase();
+  const cfg = await getConfig();
   const params = new URLSearchParams();
   if (submissionId) params.set("submission", String(submissionId));
-  if (problemId != null) params.set("problem_id", String(problemId));
+  if (problemId != null && problemId !== "") params.set("problem_id", String(problemId));
   const query = params.toString();
-  const url = query ? `${base}/coach?${query}` : `${base}/coach`;
+  const url = query ? `${cfg.webBase}/coach?${query}` : `${cfg.webBase}/coach`;
   await chrome.tabs.create({ url });
 }
 
@@ -142,27 +97,44 @@ chrome.notifications.onClicked.addListener((notificationId) => {
   }
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  refreshBridge().catch(() => {});
-});
-
-chrome.runtime.onInstalled.addListener(() => {
-  refreshBridge().catch(() => {});
-});
-
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || !message.type) return false;
 
-  if (message.type === "get_bridge_health") {
-    refreshBridge()
-      .then(async (health) => {
+  if (message.type === "auth_changed") {
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message.type === "get_api_health") {
+    (async () => {
+      const cfg = await getConfig();
+      // 先看本地 token，再向服务端校验；健康检查失败时不抹掉登录态
+      let loggedIn = Boolean(cfg.accessToken);
+      if (loggedIn) {
+        loggedIn = await ensureAuth();
+      }
+      const latest = await getConfig();
+      try {
+        const health = await apiFetch("/health");
         sendResponse({
-          ok: Boolean(health),
-          base: await bridgeBase(),
+          ok: health.status === "ok",
+          loggedIn,
           health,
+          userPublicId: latest.userPublicId,
+          userDisplay: latest.userDisplay,
+          webBase: cfg.webBase,
         });
-      })
-      .catch((error) => sendResponse({ ok: false, error: String(error) }));
+      } catch (error) {
+        sendResponse({
+          ok: false,
+          loggedIn,
+          error: friendlyError(error),
+          userPublicId: latest.userPublicId,
+          userDisplay: latest.userDisplay,
+          webBase: cfg.webBase,
+        });
+      }
+    })();
     return true;
   }
 
@@ -187,12 +159,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type !== "submission") return false;
 
   const payload = message.payload;
-  console.info("[leetcode-tracker] background received", {
-    submission_id: payload?.submission_id,
-    problem_id: payload?.problem_id,
-  });
-
-  // 采集热路径唯一副作用：POST /submit。不在此调用 LLM / prepare / SSE。
   postSubmission(payload)
     .then(async (data) => {
       const isNew = data.created === true;
@@ -204,26 +170,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       setBadge(isNew ? "ok" : "dup", "#0a7");
       clearBadgeLater();
       notify(
-        isNew ? "提交已记录 · 点击打开陪练" : "已存在该提交 · 点击打开陪练",
+        isNew ? "提交已记录 · 点击打开陪练" : "已有相同提交 · 点击打开陪练",
         summary,
         submissionId,
         payload.problem_id
       );
-      console.info("[leetcode-tracker] saved", {
-        submission_id: submissionId,
-        created: data.created,
-      });
-      // 先回包固定采集成功态。prepare 完全 fire-and-forget：
-      // 勿 await，避免 MV3 SW 在长 LLM 调用期间被挂起/打断采集体感。
       sendResponse({ ok: true, data });
       void prepareCoach(submissionId, payload.problem_id);
     })
     .catch(async (error) => {
-      const messageText = String(error.message || error);
-      await remember({ ok: false, error: messageText, summary: payload?.title || "" });
+      const messageText = friendlyError(error);
+      await remember({
+        ok: false,
+        error: messageText,
+        summary: payload?.title || "",
+      });
       setBadge("!", "#c00");
-      notify("投递失败", messageText, null, null);
-      console.error("[leetcode-tracker] submit failed", messageText);
+      if (error.status === 401) {
+        notify("需要登录", "请点击扩展图标，打开「账号登录」后再同步提交", null, null);
+      } else {
+        notify("同步失败", messageText, null, null);
+      }
       sendResponse({ ok: false, error: messageText });
     });
 

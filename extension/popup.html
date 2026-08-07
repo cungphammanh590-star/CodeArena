@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <title>LeetCode Tracker</title>
+    <title>CodeArena</title>
     <style>
       body {
         font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -29,7 +29,6 @@
       .ok { color: #6d9f82; font-weight: 600; }
       .bad { color: #c97878; font-weight: 600; }
       .muted { color: #948984; font-size: 11px; line-height: 1.45; }
-      code { font-size: 11px; background: #f3e9e6; padding: 1px 4px; border-radius: 3px; }
       button {
         width: 100%;
         margin-top: 8px;
@@ -41,9 +40,7 @@
         font-size: 12px;
         cursor: pointer;
       }
-      button.coach {
-        background: #9b8ec4;
-      }
+      button.coach { background: #9b8ec4; }
       button.secondary {
         background: #eadfd9;
         color: #3f3a38;
@@ -71,9 +68,9 @@
     </style>
   </head>
   <body>
-    <h1>LeetCode Tracker</h1>
-    <div class="row"><span>服务状态</span><span id="bridge">检测中…</span></div>
-    <div class="row"><span>库内提交数</span><span id="count">—</span></div>
+    <h1>CodeArena</h1>
+    <div class="row"><span>状态</span><span id="status-label">检测中…</span></div>
+    <div class="row"><span>账号</span><span id="user-label" class="muted">—</span></div>
 
     <h2>本题陪练建议</h2>
     <div class="coach-card">
@@ -89,7 +86,9 @@
 
     <div id="last" class="muted">最近一次：尚无记录</div>
     <button id="open-dashboard" type="button" disabled>打开仪表盘</button>
-    <button id="refresh" class="secondary" type="button">重新检测</button>
+    <button id="open-options" class="secondary" type="button">账号登录</button>
+    <button id="refresh" class="secondary" type="button">刷新</button>
+    <script src="config.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

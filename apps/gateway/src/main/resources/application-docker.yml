@@ -1,0 +1,9 @@
+# Docker profile: service discovery URIs come from env
+# CODEARENA_BUSINESS_URI / CODEARENA_LLM_URI (see docker-compose.yml)
+
+spring:
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+        register-enabled: false

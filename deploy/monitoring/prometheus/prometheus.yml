@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8080"]
+        labels:
+          service: gateway
+
+  - job_name: business-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["business-service:8090"]
+        labels:
+          service: business-service
+
+  - job_name: llm-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["llm-service:8091"]
+        labels:
+          service: llm-service

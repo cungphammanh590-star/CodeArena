@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>CodeArena · 账号</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        max-width: 420px;
+        margin: 24px auto;
+        padding: 0 16px 40px;
+        color: #3f3a38;
+        background: #f7f1ef;
+      }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      label { display: block; font-size: 12px; margin: 10px 0 4px; color: #948984; }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border: 1px solid #eadfd9;
+        border-radius: 8px;
+        font: inherit;
+        background: #fff;
+      }
+      button {
+        margin-top: 12px;
+        margin-right: 8px;
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 14px;
+        background: #c67a88;
+        color: #fff;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      button.secondary { background: #eadfd9; color: #3f3a38; }
+      .muted { color: #948984; font-size: 12px; line-height: 1.5; }
+      .ok { color: #6d9f82; }
+      .bad { color: #c97878; }
+      #status { margin-top: 12px; font-size: 13px; white-space: pre-wrap; }
+      .card {
+        background: #fffbf9;
+        border: 1px solid #eadfd9;
+        border-radius: 12px;
+        padding: 14px;
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>账号</h1>
+    <p class="muted">登录后，力扣提交会同步到你的 CodeArena 账号，并可打开陪练。</p>
+
+    <div class="card">
+      <p class="muted" id="auth-summary">加载中…</p>
+      <label for="username">用户名</label>
+      <input id="username" autocomplete="username" placeholder="3–32 位字母、数字或下划线" />
+      <label for="password">密码</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="至少 6 位" />
+      <button id="login" type="button">登录</button>
+      <button id="register" class="secondary" type="button">注册</button>
+      <button id="logout" class="secondary" type="button">退出登录</button>
+    </div>
+
+    <div id="status" class="muted"></div>
+    <script src="config.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

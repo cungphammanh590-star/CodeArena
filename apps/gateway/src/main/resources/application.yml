@@ -1,0 +1,148 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway
+  threads:
+    virtual:
+      enabled: true
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    nacos:
+      discovery:
+        enabled: false
+        fail-fast: false
+        register-enabled: false
+    gateway:
+      globalcors:
+        # 扩展 options/popup 会带 Origin: chrome-extension://…；未放行时 Gateway 直接 403
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
+              - "chrome-extension://*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+      routes:
+        # 仅对话 SSE → Python；其余业务含 coach 编排 → Java
+        - id: llm-coach-stream
+          uri: ${CODEARENA_LLM_URI:http://localhost:8091}
+          predicates:
+            - Path=/api/coach/stream
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: llmService
+                fallbackUri: forward:/fallback/llm
+        # Domain routes (today → business-service; later change URI only)
+        - id: domain-team
+          uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
+          predicates:
+            - Path=/api/team/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: businessService
+                fallbackUri: forward:/fallback/business
+        - id: domain-pay
+          uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
+          predicates:
+            - Path=/api/pay/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: businessService
+                fallbackUri: forward:/fallback/business
+        - id: domain-users
+          uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: businessService
+                fallbackUri: forward:/fallback/business
+        # Business API catch-all（含 /api/coach/prepare|session|hint、/api/ops/**）
+        - id: business-api
+          uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
+          predicates:
+            - Path=/api/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: businessService
+                fallbackUri: forward:/fallback/business
+        - id: business-submit
+          uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
+          predicates:
+            - Path=/submit
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: businessService
+                fallbackUri: forward:/fallback/business
+        - id: business-health
+          uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
+          predicates:
+            - Path=/health
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: businessService
+                fallbackUri: forward:/fallback/business
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 20
+        permittedNumberOfCallsInHalfOpenState: 5
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        slowCallRateThreshold: 80
+        slowCallDurationThreshold: 5s
+    instances:
+      businessService:
+        baseConfig: default
+      llmService:
+        baseConfig: default
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 15s
+    instances:
+      businessService:
+        baseConfig: default
+      llmService:
+        baseConfig: default
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO

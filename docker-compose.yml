@@ -1,0 +1,252 @@
+# CodeArena — full stack
+# Default profile: infra + apps (nginx, gateway, business, llm, postgres, redis, nacos)
+# Observability profile: prometheus, grafana, loki, skywalking
+#
+#   docker compose up -d
+#   docker compose --profile observability up -d
+#   docker compose -f docker-compose.infra.yml up -d
+
+name: codearena
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: codearena-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-codearena}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codearena}
+      POSTGRES_DB: ${POSTGRES_DB:-codearena}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - codearena_pg_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codearena} -d ${POSTGRES_DB:-codearena}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: codearena-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - codearena_redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: codearena-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      NACOS_AUTH_ENABLE: "false"
+    ports:
+      - "${NACOS_PORT:-8848}:8848"
+      - "9848:9848"
+    volumes:
+      - codearena_nacos_data:/home/nacos/data
+    # Optional: mount ./deploy/nacos/application.properties
+
+  llm-service:
+    build:
+      context: ./apps/llm-service
+      dockerfile: Dockerfile
+    container_name: codearena-llm
+    restart: unless-stopped
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_COACH_MODEL: ${LLM_COACH_MODEL:-qwen2.5:7b-instruct-q4_K_M}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      POSTGRES_DSN: postgresql://${POSTGRES_USER:-codearena}:${POSTGRES_PASSWORD:-codearena}@postgres:5432/${POSTGRES_DB:-codearena}
+      NACOS_SERVER_ADDR: nacos:8848
+      BUSINESS_INTERNAL_URL: ${BUSINESS_INTERNAL_URL:-http://business-service:8090}
+      INTERNAL_TOOL_TOKEN: ${CODEARENA_INTERNAL_TOKEN:-codearena-internal-dev}
+      CHECKPOINT_BACKEND: ${CHECKPOINT_BACKEND:-auto}
+      CHECKPOINT_TTL_SECONDS: ${CHECKPOINT_TTL_SECONDS:-604800}
+    ports:
+      - "${LLM_SERVICE_PORT:-8091}:8091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  business-service:
+    build:
+      context: ./apps/business-service
+      dockerfile: Dockerfile
+    image: ${BUSINESS_IMAGE:-codearena/business-service:local}
+    container_name: codearena-business
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-codearena}
+      POSTGRES_USER: ${POSTGRES_USER:-codearena}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codearena}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CODEARENA_INTERNAL_TOKEN: ${CODEARENA_INTERNAL_TOKEN:-codearena-internal-dev}
+      CODEARENA_LLM_KEY_SECRET: ${CODEARENA_LLM_KEY_SECRET:-}
+    ports:
+      - "${BUSINESS_SERVICE_PORT:-8090}:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8090/actuator/health | grep -q UP || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+
+  gateway:
+    build:
+      context: ./apps/gateway
+      dockerfile: Dockerfile
+    image: ${GATEWAY_IMAGE:-codearena/gateway:local}
+    container_name: codearena-gateway
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      CODEARENA_BUSINESS_URI: http://business-service:8090
+      CODEARENA_LLM_URI: http://llm-service:8091
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      business-service:
+        condition: service_healthy
+      llm-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health | grep -q UP || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    image: ${WEB_IMAGE:-codearena/web:local}
+    container_name: codearena-web
+    restart: unless-stopped
+    # nginx serves the built static assets from this image via shared volume pattern;
+    # for simplicity, expose Vite preview-style nginx inside the web image on 8080 mapped to host 5173 optional.
+    ports:
+      - "${WEB_PORT:-5173}:80"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: codearena-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - gateway
+      - web
+
+  # --- observability profile ---
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v2.54.1
+    container_name: codearena-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./deploy/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - codearena_prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:11.2.0
+    container_name: codearena-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - codearena_grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    profiles: ["observability"]
+    image: grafana/loki:3.1.1
+    container_name: codearena-loki
+    restart: unless-stopped
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./deploy/monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - codearena_loki_data:/loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+
+  skywalking-oap:
+    profiles: ["observability"]
+    image: apache/skywalking-oap-server:9.7.0
+    container_name: codearena-skywalking-oap
+    restart: unless-stopped
+    environment:
+      SW_STORAGE: h2
+      SW_HEALTH_CHECKER: default
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+    ports:
+      - "${SKYWALKING_GRPC_PORT:-11800}:11800"
+      - "${SKYWALKING_HTTP_PORT:-12800}:12800"
+
+  skywalking-ui:
+    profiles: ["observability"]
+    image: apache/skywalking-ui:9.7.0
+    container_name: codearena-skywalking-ui
+    restart: unless-stopped
+    environment:
+      SW_OAP_ADDRESS: http://skywalking-oap:12800
+    ports:
+      - "${SKYWALKING_UI_PORT:-8088}:8080"
+    depends_on:
+      - skywalking-oap
+
+volumes:
+  codearena_pg_data:
+  codearena_redis_data:
+  codearena_nacos_data:
+  codearena_prometheus_data:
+  codearena_grafana_data:
+  codearena_loki_data:

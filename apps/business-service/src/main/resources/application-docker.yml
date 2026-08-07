@@ -1,0 +1,11 @@
+# Activate with: --spring.profiles.active=docker
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:postgres}:${POSTGRES_PORT:5432}/${POSTGRES_DB:codearena}
+    username: ${POSTGRES_USER:codearena}
+    password: ${POSTGRES_PASSWORD:codearena}
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}

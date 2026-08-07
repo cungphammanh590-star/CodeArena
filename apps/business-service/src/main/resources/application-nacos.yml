@@ -1,0 +1,10 @@
+# Activate with: --spring.profiles.active=nacos
+spring:
+  cloud:
+    nacos:
+      discovery:
+        enabled: true
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        service: business-service
