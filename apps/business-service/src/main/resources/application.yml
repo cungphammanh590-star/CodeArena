@@ -16,6 +16,7 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
+      leak-detection-threshold: ${HIKARI_LEAK_DETECTION_MS:0}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -31,7 +32,7 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+      port: ${REDIS_PORT:6380}
       password: ${REDIS_PASSWORD:}
       database: ${REDIS_DB:0}
   cloud:
@@ -71,6 +72,8 @@ resilience4j:
 logging:
   level:
     com.codearena.business: INFO
+    org.hibernate.SQL: ${CODEARENA_SQL_LOG_LEVEL:INFO}
+    org.hibernate.orm.jdbc.bind: ${CODEARENA_SQL_BIND_LEVEL:WARN}
 
 codearena:
   internal:

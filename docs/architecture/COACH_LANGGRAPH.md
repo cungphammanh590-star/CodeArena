@@ -160,7 +160,7 @@ START → hydrate → classify → refuse | offer | confirm | agent ⇄ tools �
 |----|------|
 | **thread_id** | `smart:{user_public_id}:{session_id}` |
 | **存什么** | 整份 `SmartState`（含窗口内 messages、phase、summary…） |
-| **后端** | `CHECKPOINT_BACKEND`：`auto`（默认）\| `redis` \| `memory` |
+| **后端** | `CHECKPOINT_BACKEND`：`auto`（探测 `JSON.SET`）\| `redis` \| `memory`。需 **redis-stack**（本机 `make redis-stack`，默认 **:6380**；Compose 镜像 `redis/redis-stack-server`）。普通 Homebrew `redis` 可继续占 :6379，互不抢端口；`REDIS_URL` 指向 stack 端口 |
 | **TTL** | 默认 7 天 |
 | **过期后** | hydrate 用 `get_session_context` + turns 复活；**无合法 phase → `lobby`** |
 
@@ -203,9 +203,16 @@ START → hydrate → classify → refuse | offer | confirm | agent ⇄ tools �
 | `ready` | `session_id`, `graph`, `checkpoint`, `actions_hint` | stream 入口 |
 | `info` | `phase`, `intent`, `route`, `intent_confidence`… | classify |
 | `confirm` | `prompt`, `choices[{id,label,text}]` | confirm；前端渲染按钮，点击把 `text` 当用户消息发送 |
+| `ask_user` | `intro`, `questions[{id,prompt,options,…}]` | LOCAL `ask_user`；前端多题卡片，提交 `action=submit_user_reply` |
+| `solve_progress` | `analysis`, `steps[{id,goal,done,summary}]`, `next`, `all_done` | solve_* 工具 / finalize |
+| `code_result` | `language`, `exit_code`, `timed_out`, `stdout_preview`, `stderr_preview` | `code_execution` |
 | `token` | `text`（agent 上游流式；refuse/offer 分块）；护栏改写时 `replace=true` | agent / finalize |
-| `done` | `reply`, `phase`, `close_scope`, `done` | stream 收尾 |
+| `done` | `reply`, `phase`, `close_scope`, `done`；等待澄清时 `awaiting=ask_user` 且 `done=false` | stream 收尾 |
 | `error` | `message` | 配置失败 / 异常 |
+
+**伪 interrupt（P0）**：`ask_user` → 写 checkpoint.`paused_ask` → SSE `ask_user` + `done.awaiting` → 下轮 `submit_user_reply` + `answers` → hydrate 注入 ToolMessage → 强制 agent。暂停中发普通消息则取消 `paused_ask` 后走 classify。
+
+**工具门控**：`in_problem` / `in_problem_help` 才挂 `solve_*` + `code_execution`；`MAX_TOOL_ROUNDS` 题内 5、其它 3。沙箱仅在 llm-service（`app/sandbox/`）。
 
 ---
 
@@ -217,11 +224,14 @@ START → hydrate → classify → refuse | offer | confirm | agent ⇄ tools �
 | State | `apps/llm-service/app/coach/state.py` |
 | 路由 | `apps/llm-service/app/coach/routing.py` |
 | 确认选项 | `apps/llm-service/app/coach/confirm.py` |
+| LOCAL 工具 | `apps/llm-service/app/coach/local_tools.py` |
+| Solve 状态机 | `apps/llm-service/app/coach/solve/` |
+| Sandbox | `apps/llm-service/app/sandbox/` |
 | Checkpoint | `apps/llm-service/app/coach/checkpoint.py` |
 | SSE 驱动 | `apps/llm-service/app/coach/stream.py` |
 | 意图/阶段 | `intent_smart.py` / `phases.py` |
 | 窗口/摘要 | `window.py` |
-| Java 会话 | `coach/memory/*`，迁移 V5/V6 |
+| Java 会话 | `coach/memory/*`；Flyway V3=`coach_code_runs` + mastery 占位 |
 
 ---
 
@@ -229,5 +239,8 @@ START → hydrate → classify → refuse | offer | confirm | agent ⇄ tools �
 
 - classify 灰区用极小 `classifier_llm`（当前以 confirm 选项代替）
 - hydrate 并行 `Send` 降首字延迟
-- Human-in-the-loop：`interrupt` + `pending_action`
+- 真 LangGraph `interrupt`（P0 用伪 interrupt）
 - 真·token 计数器（tiktoken）替代 4 字近似
+- 沙箱 bwrap / sidecar；c/cpp 语言
+- `append_code_run` Java 审计工具（表已就绪）
+- mastery / spaced repetition（表已占位）

@@ -71,7 +71,17 @@ async def coach_stream(request: Request) -> Any:
     session_id = str((payload or {}).get("session_id") or "").strip()
     message = str((payload or {}).get("message") or "").strip()
     action = str((payload or {}).get("action") or "").strip()
-    if not session_id or (not message and not action):
+    raw_answers = (payload or {}).get("answers")
+    answers: list[dict[str, Any]] = []
+    if isinstance(raw_answers, list):
+        answers = [a for a in raw_answers if isinstance(a, dict)]
+
+    if not session_id:
+        return _json_error("session_id required")
+    if action == "submit_user_reply":
+        if not answers:
+            return _json_error("answers required for submit_user_reply")
+    elif not message and not action:
         return _json_error("session_id and (message or action) required")
 
     user_public_id = (
@@ -96,6 +106,7 @@ async def coach_stream(request: Request) -> Any:
         session,
         message,
         action=action,
+        answers=answers,
         cancel_event=cancel_event,
     )
 

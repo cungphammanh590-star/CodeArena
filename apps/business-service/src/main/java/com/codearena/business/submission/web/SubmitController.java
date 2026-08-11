@@ -43,8 +43,22 @@ public class SubmitController {
         }
         String submissionId = String.valueOf(sidRaw);
 
+        var currentUser = currentUserService.require(request);
+
         Optional<SubmissionEntity> existing = submissionRepository.findBySubmissionId(submissionId);
         if (existing.isPresent()) {
+            SubmissionEntity row = existing.get();
+            // 认领到当前登录用户（扩展曾因未登录/网络失败导致行挂在其他账号或空 user）
+            if (row.getUserId() == null || !row.getUserId().equals(currentUser.getId())) {
+                row.setUserId(currentUser.getId());
+                if (payload.get("status") != null) {
+                    row.setStatus(String.valueOf(payload.get("status")));
+                }
+                if (payload.get("code") != null) {
+                    row.setCode(String.valueOf(payload.get("code")));
+                }
+                submissionRepository.save(row);
+            }
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("status", "success");
             body.put("message", "Submission already exists");
@@ -69,7 +83,7 @@ public class SubmitController {
         entity.setMemoryMb(toDouble(payload.get("memory_mb")));
         entity.setLanguage(
                 payload.get("language") == null ? null : String.valueOf(payload.get("language")));
-        entity.setUserId(currentUserService.require(request).getId());
+        entity.setUserId(currentUser.getId());
         entity.setSubmittedAt(OffsetDateTime.now());
         submissionRepository.save(entity);
 

@@ -139,19 +139,21 @@ onUnmounted(() => {
   background: var(--card);
   color: var(--ink);
   border-radius: 999px;
-  padding: 7px 12px 7px 10px;
+  padding: 8px 12px 8px 10px;
   font: inherit;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 1px 0 rgba(28, 25, 23, 0.04);
+  min-height: 40px;
 }
 .prefs-trigger:hover {
-  border-color: #e2b6be;
+  border-color: var(--line-strong);
   color: var(--accent);
 }
 .prefs-trigger[aria-expanded="true"] {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-soft);
 }
 .prefs-dot {
   width: 8px;
@@ -177,7 +179,7 @@ onUnmounted(() => {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
-  box-shadow: 0 18px 40px rgba(28, 25, 23, 0.12);
+  box-shadow: var(--shadow);
   padding: 14px;
   z-index: 40;
 }
@@ -214,7 +216,7 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .prefs-toggle:hover {
-  border-color: #e2b6be;
+  border-color: var(--line-strong);
 }
 .prefs-toggle input {
   width: 16px;
@@ -240,13 +242,14 @@ onUnmounted(() => {
   font: inherit;
   font-size: 13px;
   color: var(--ink);
+  min-height: 40px;
 }
 .prefs-progress {
   margin: 10px 0 0;
   padding: 8px 10px;
   border-radius: 10px;
   background: var(--accent-soft);
-  color: #9a5563;
+  color: var(--accent);
   font-size: 12px;
   line-height: 1.45;
 }

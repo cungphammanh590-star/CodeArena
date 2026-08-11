@@ -161,23 +161,37 @@
       problemMetaCacheById.set(String(mergedBySlug.problem_id), mergedBySlug);
     }
     if (mergedBySlug.problem_id || mergedBySlug.slug) {
-      try {
-        window.postMessage(
-          {
-            source: "leetcode-tracker",
-            type: "problem_context",
-            payload: {
-              problem_id: mergedBySlug.problem_id,
-              title: mergedBySlug.title,
-              slug: mergedBySlug.slug,
-              difficulty: mergedBySlug.difficulty,
-              href: String(location.href),
+      const fingerprint = [
+        mergedBySlug.problem_id || "",
+        mergedBySlug.slug || "",
+        mergedBySlug.difficulty || "",
+        mergedBySlug.title || "",
+      ].join("|");
+      const now = Date.now();
+      const prev = window.__leetcodeTrackerLastContextFp || "";
+      const prevAt = window.__leetcodeTrackerLastContextAt || 0;
+      // 相同 meta 不重复广播；至少间隔 1.5s，避免 MutationObserver 刷屏
+      if (fingerprint !== prev || now - prevAt > 1500) {
+        window.__leetcodeTrackerLastContextFp = fingerprint;
+        window.__leetcodeTrackerLastContextAt = now;
+        try {
+          window.postMessage(
+            {
+              source: "leetcode-tracker",
+              type: "problem_context",
+              payload: {
+                problem_id: mergedBySlug.problem_id,
+                title: mergedBySlug.title,
+                slug: mergedBySlug.slug,
+                difficulty: mergedBySlug.difficulty,
+                href: String(location.href),
+              },
             },
-          },
-          "*"
-        );
-      } catch {
-        // ignore
+            "*"
+          );
+        } catch {
+          // ignore
+        }
       }
     }
     return mergedBySlug;
@@ -266,6 +280,7 @@
     if (window.__leetcodeTrackerMetaWatchStarted) return;
     window.__leetcodeTrackerMetaWatchStarted = true;
 
+    let scheduled = false;
     const refresh = () => {
       const meta = extractProblemMeta();
       if (
@@ -277,14 +292,22 @@
         void fetchProblemMetaBySlug(meta.slug);
       }
     };
+    const scheduleRefresh = () => {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(() => {
+        scheduled = false;
+        refresh();
+      }, 400);
+    };
 
-    const observer = new MutationObserver(refresh);
+    const observer = new MutationObserver(scheduleRefresh);
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
-      characterData: true,
+      // 不监听 characterData：Monaco 编辑会狂触发，无助于题号解析
     });
-    setInterval(refresh, 2000);
+    setInterval(refresh, 3000);
     refresh();
   }
 

@@ -17,5 +17,8 @@ public interface CoachSessionRepository extends JpaRepository<CoachSessionEntity
     Optional<CoachSessionEntity> findFirstByUserIdAndTopicAndStatusOrderByUpdatedAtDesc(
             Long userId, String topic, String status);
 
+    Optional<CoachSessionEntity> findFirstByUserIdAndSessionKindAndStatusOrderByUpdatedAtDesc(
+            Long userId, String sessionKind, String status);
+
     List<CoachSessionEntity> findTop20ByUserIdOrderByUpdatedAtDesc(Long userId);
 }

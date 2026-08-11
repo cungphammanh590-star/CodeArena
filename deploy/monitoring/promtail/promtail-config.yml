@@ -1,0 +1,39 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/promtail-positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: codearena-containers
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: codearena
+          __path__: /var/lib/docker/containers/*/*-json.log
+    pipeline_stages:
+      - docker: {}
+
+  - job_name: codearena-tmp-logs
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: codearena-files
+          __path__: /host_tmp/codearena-*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            service: service
+            message: message
+            request_id: request_id
+            tool_name: tool_name
+      - labels:
+          level:
+          service:
+          request_id:
+          tool_name:

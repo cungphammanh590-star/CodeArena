@@ -1,0 +1,8 @@
+# Overlay copied onto agent/config/agent.config after download (optional).
+# Local defaults for CodeArena.
+
+agent.service_name=${SW_AGENT_NAME:codearena-service}
+collector.backend_service=${SW_AGENT_COLLECTOR:127.0.0.1:11800}
+agent.sample_n_per_3_secs=-1
+plugin.jdbc.trace_sql_parameters=false
+logging.level=INFO

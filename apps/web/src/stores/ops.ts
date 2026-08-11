@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import api from "@/api/client";
 import type { LearnList } from "./learning";
+import { toUserMessage } from "@/utils/userMessage";
 
 export interface OpsConfig {
   host?: string;
@@ -85,6 +86,8 @@ export const useOpsStore = defineStore("ops", () => {
     text: string,
     kind: "ok" | "err" | "" = "",
   ) {
+    const display =
+      kind === "err" ? toUserMessage(text, "操作失败，请稍后再试") : text;
     const map = {
       config: [configMsg, configMsgKind],
       learn: [learnMsg, learnMsgKind],
@@ -95,7 +98,7 @@ export const useOpsStore = defineStore("ops", () => {
       sample: [sampleMsg, sampleMsgKind],
     } as const;
     const [t, k] = map[which];
-    t.value = text;
+    t.value = display;
     k.value = kind;
   }
 
@@ -435,7 +438,7 @@ export const useOpsStore = defineStore("ops", () => {
       importExistingList.value = data.list_id;
       await loadExistingItems();
     } catch (err) {
-      setMsg("learn", `导入失败：${String(err)}`, "err");
+      setMsg("learn", toUserMessage(err, "导入失败，请检查题单内容后重试"), "err");
     }
   }
 

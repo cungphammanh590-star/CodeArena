@@ -29,14 +29,16 @@ services:
       retries: 5
 
   redis:
-    image: redis:7
+    # RedisJSON 等模块：LangGraph checkpoint 需要 JSON.SET
+    image: redis/redis-stack-server:latest
     container_name: codearena-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-6380}:6379"
     volumes:
       - codearena_redis_data:/data
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      REDIS_ARGS: "--appendonly yes"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -78,6 +80,14 @@ services:
       INTERNAL_TOOL_TOKEN: ${CODEARENA_INTERNAL_TOKEN:-codearena-internal-dev}
       CHECKPOINT_BACKEND: ${CHECKPOINT_BACKEND:-auto}
       CHECKPOINT_TTL_SECONDS: ${CHECKPOINT_TTL_SECONDS:-604800}
+      OBSERVABILITY_SKYWALKING: ${OBSERVABILITY_SKYWALKING:-false}
+      SKYWALKING_COLLECTOR: ${SKYWALKING_COLLECTOR:-skywalking-oap:11800}
+      SKYWALKING_SERVICE_NAME: llm-service
+      LANGFUSE_TRACING: ${LANGFUSE_TRACING:-false}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-codearena-local}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-codearena-local-secret}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://host.docker.internal:3030}
+      LOG_JSON: "true"
     ports:
       - "${LLM_SERVICE_PORT:-8091}:8091"
     depends_on:
@@ -109,6 +119,12 @@ services:
       REDIS_PORT: 6379
       CODEARENA_INTERNAL_TOKEN: ${CODEARENA_INTERNAL_TOKEN:-codearena-internal-dev}
       CODEARENA_LLM_KEY_SECRET: ${CODEARENA_LLM_KEY_SECRET:-}
+      CODEARENA_SQL_LOG_LEVEL: ${CODEARENA_SQL_LOG_LEVEL:-INFO}
+      JAVA_TOOL_OPTIONS: ${BUSINESS_JAVA_TOOL_OPTIONS:-}
+      SW_AGENT_NAME: business-service
+      SW_AGENT_COLLECTOR: skywalking-oap:11800
+    volumes:
+      - ./deploy/observability/skywalking/agent:/skywalking:ro
     ports:
       - "${BUSINESS_SERVICE_PORT:-8090}:8090"
     depends_on:
@@ -134,6 +150,11 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       CODEARENA_BUSINESS_URI: http://business-service:8090
       CODEARENA_LLM_URI: http://llm-service:8091
+      JAVA_TOOL_OPTIONS: ${GATEWAY_JAVA_TOOL_OPTIONS:-}
+      SW_AGENT_NAME: gateway
+      SW_AGENT_COLLECTOR: skywalking-oap:11800
+    volumes:
+      - ./deploy/observability/skywalking/agent:/skywalking:ro
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
@@ -242,6 +263,20 @@ services:
       - "${SKYWALKING_UI_PORT:-8088}:8080"
     depends_on:
       - skywalking-oap
+
+  promtail:
+    profiles: ["observability"]
+    image: grafana/promtail:3.1.1
+    container_name: codearena-promtail
+    restart: unless-stopped
+    volumes:
+      - ./deploy/monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /tmp:/host_tmp:ro
+    command: ["-config.file=/etc/promtail/config.yml"]
+    depends_on:
+      - loki
 
 volumes:
   codearena_pg_data:

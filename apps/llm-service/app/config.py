@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# apps/llm-service/app/config.py → repo root
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_ENV_CANDIDATES = (
+    _REPO_ROOT / ".env",
+    Path(".env"),
+)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=tuple(str(p) for p in _ENV_CANDIDATES if p.is_file()) or (".env",),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -28,7 +36,7 @@ class Settings(BaseSettings):
     llm_max_connections: int = 20
 
     # Infra (placeholders for future wiring)
-    redis_url: str = "redis://127.0.0.1:6379/0"
+    redis_url: str = "redis://127.0.0.1:6380/0"
     postgres_dsn: str = "postgresql://codearena:zephyr@127.0.0.1:5432/codearena"
     nacos_server_addr: str = "127.0.0.1:8848"
 
@@ -39,6 +47,25 @@ class Settings(BaseSettings):
     # L1 checkpoint：auto|redis|memory
     checkpoint_backend: str = "auto"
     checkpoint_ttl_seconds: int = 604800  # 7d
+
+    # Code sandbox (P0)
+    sandbox_backend: str = "subprocess"  # subprocess | off
+    sandbox_timeout_s: int = 10
+    sandbox_memory_mb: int = 256
+    sandbox_max_output_chars: int = 8000
+    sandbox_max_concurrent_per_user: int = 1
+    sandbox_max_runs_per_minute: int = 10
+    sandbox_data_dir: str = "/tmp/leetmate-code-runs"
+
+    # Observability
+    observability_skywalking: bool = False
+    skywalking_collector: str = "127.0.0.1:11800"
+    skywalking_service_name: str = "llm-service"
+    langfuse_tracing: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "http://127.0.0.1:3030"
+    log_json: bool = True
 
 
 @lru_cache

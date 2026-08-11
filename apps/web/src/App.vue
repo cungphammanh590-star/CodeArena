@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { RouterView } from "vue-router";
+import { computed } from "vue";
+import { RouterView, useRoute } from "vue-router";
+import AppTopbar from "@/components/AppTopbar.vue";
+
+const route = useRoute();
+const showChrome = computed(() => route.name !== "login");
 </script>
 
 <template>
-  <RouterView />
+  <div class="app-shell">
+    <AppTopbar v-if="showChrome" />
+    <RouterView />
+  </div>
 </template>

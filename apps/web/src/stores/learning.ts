@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import api from "@/api/client";
+import { toUserMessage } from "@/utils/userMessage";
 
 export interface LearnList {
   id: string;
@@ -78,7 +79,7 @@ export const useLearningStore = defineStore("learning", () => {
       reviewDue.value = (review && review.due) || [];
       mastered.value = (masteredData && masteredData.items) || [];
     } catch (err) {
-      setMsg(`加载失败：${err}`, "err");
+      setMsg(toUserMessage(err, "加载失败，请稍后再试"), "err");
     }
   }
 
@@ -90,11 +91,13 @@ export const useLearningStore = defineStore("learning", () => {
         kg_mode: kgMode.value,
         active_list_id: activeListId.value,
       });
-      if (data.status !== "ok") throw new Error(data.message || "failed");
+      if (data.status !== "ok") {
+        throw new Error(data.message || "保存失败");
+      }
       setMsg("已保存", "ok");
       await load();
     } catch (err) {
-      setMsg(String(err), "err");
+      setMsg(toUserMessage(err, "保存失败，请稍后再试"), "err");
     }
   }
 

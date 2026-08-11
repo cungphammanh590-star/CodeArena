@@ -2,7 +2,7 @@
 
 浏览器扩展 / Web 前端 → Nginx → API Gateway → 业务服务 + LLM 陪练服务，并配套 Postgres、Redis、Nacos 与可观测性组件。
 
-**仓库形态**：Java + Python + Vue 的 **polyglot monorepo**。业务一律经 Gateway 进 **business-service**；**llm-service 仅负责陪练 SSE / LangGraph**。详见 [BUSINESS_FLOW.md](./BUSINESS_FLOW.md)、[MODULAR_BUSINESS.md](./MODULAR_BUSINESS.md)、[REPO_LAYOUT.md](./REPO_LAYOUT.md)。
+**仓库形态**：Java + Python + Vue 的 **polyglot monorepo**。业务一律经 Gateway 进 **business-service**；**llm-service 仅负责陪练 SSE / LangGraph**。详见 [BUSINESS_FLOW.md](./BUSINESS_FLOW.md)、[MODULAR_BUSINESS.md](./MODULAR_BUSINESS.md)、[REPO_LAYOUT.md](./REPO_LAYOUT.md)。可观测性见 [OBSERVABILITY.md](./OBSERVABILITY.md)（SkyWalking / Langfuse / Loki）。项目评价与摘除/路线见 [PROJECT_REVIEW.md](./PROJECT_REVIEW.md)。
 
 ## 架构图
 
@@ -39,6 +39,7 @@ flowchart LR
     Loki[Loki :3100]
     SWOAP[SkyWalking OAP :11800/:12800]
     SWUI[SkyWalking UI :8088]
+    LF[Langfuse :3030]
   end
 
   Prom -.-> GW
@@ -47,6 +48,7 @@ flowchart LR
   Graf --> Prom
   Graf --> Loki
   SWUI --> SWOAP
+  LLM -.-> LF
 ```
 
 ## 端口一览
@@ -65,6 +67,7 @@ flowchart LR
 | loki | 3100 | 日志（observability） |
 | skywalking-oap | 11800 / 12800 | 链路追踪（observability） |
 | skywalking-ui | 8088 | 追踪 UI（observability） |
+| langfuse | 3030 | Agent / LangGraph 图（`docker-compose.langfuse.yml`） |
 
 ## 本地开发 vs Docker
 

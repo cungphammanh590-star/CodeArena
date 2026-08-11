@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import { fetchHealth, userHeaders } from "@/api/client";
 import { readSse } from "@/composables/useSse";
+import { toUserMessage } from "@/utils/userMessage";
 
 export interface ConfirmChoice {
   id: string;
@@ -9,11 +10,52 @@ export interface ConfirmChoice {
   text: string;
 }
 
+export interface AskQuestion {
+  id: string;
+  prompt: string;
+  header?: string;
+  options?: { label: string; description?: string }[];
+  multi_select?: boolean;
+  allow_free_text?: boolean;
+  placeholder?: string;
+}
+
+export interface AskUserPayload {
+  intro?: string;
+  questions: AskQuestion[];
+}
+
+export interface SolveStepView {
+  id: string;
+  goal: string;
+  done: boolean;
+  summary?: string;
+}
+
+export interface SolveProgress {
+  analysis?: string;
+  steps: SolveStepView[];
+  next?: SolveStepView | null;
+  all_done?: boolean;
+}
+
+export interface CodeResultView {
+  language: string;
+  exit_code: number;
+  timed_out: boolean;
+  stdout_preview?: string;
+  stderr_preview?: string;
+  error?: string;
+}
+
 export interface ChatMessage {
   id: number;
   role: "coach" | "user" | "system";
   text: string;
   choices?: ConfirmChoice[];
+  askUser?: AskUserPayload;
+  solveProgress?: SolveProgress;
+  codeResult?: CodeResultView;
 }
 
 let msgSeq = 0;
@@ -39,10 +81,18 @@ export const useCoachStore = defineStore("coach", () => {
   const messages = ref<ChatMessage[]>([]);
   const composerEnabled = ref(false);
   const inputText = ref("");
+  const awaitingAskUser = ref(false);
+  const pendingAsk = ref<AskUserPayload | null>(null);
+  const askDrafts = ref<Record<string, string>>({});
+  const latestSolve = ref<SolveProgress | null>(null);
 
   function showBanner(text: string) {
     banner.value = text;
     bannerVisible.value = true;
+  }
+
+  function showErrorBanner(err: unknown, fallback = "出了点问题，请稍后再试") {
+    showBanner(toUserMessage(err, fallback));
   }
 
   function hideBanner() {
@@ -113,7 +163,9 @@ export const useCoachStore = defineStore("coach", () => {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "无法开始陪练");
+      if (!res.ok) {
+        throw new Error(toUserMessage(data.message, "暂时无法开始陪练，请稍后再试"));
+      }
       return data as Record<string, unknown>;
     })();
     try {
@@ -166,12 +218,25 @@ export const useCoachStore = defineStore("coach", () => {
     enableComposer();
   }
 
+  async function startWithProblem(pid: string, openingHint?: string) {
+    const data = await prepare("", pid, "");
+    sessionId.value = String(data.session_id || "");
+    const opening =
+      openingHint ||
+      String(data.opening || "") ||
+      `已就题目 ${pid} 开启陪练，可以直接提问。`;
+    addMsg(opening, "coach");
+    enableComposer();
+  }
+
   async function loadHint(pid: string) {
     const res = await fetch(`/api/coach/hint/${encodeURIComponent(pid)}`, {
       headers: userHeaders(),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "hint failed");
+    if (!res.ok) {
+      throw new Error(toUserMessage(data.message, "暂时无法加载题目提示，请稍后再试"));
+    }
     if (data.latest_submission_id) {
       await startWithSubmission(
         String(data.latest_submission_id),
@@ -179,8 +244,17 @@ export const useCoachStore = defineStore("coach", () => {
       );
       return;
     }
-    addMsg(data.suggestion || "暂无建议", "coach");
-    showBanner("尚无可用提交记录；在力扣提交后会自动关联最近结果。");
+    // 无本地提交：仍按题号开会话，允许聊天（计划/思路）
+    showBanner(
+      String(
+        data.suggestion ||
+          "本题暂无同步到的提交；仍可开聊。扩展同步成功后会自动关联代码。",
+      ),
+    );
+    await startWithProblem(
+      String(pid),
+      String(data.suggestion || data.hint || ""),
+    );
   }
 
   function clearChoices() {
@@ -189,18 +263,27 @@ export const useCoachStore = defineStore("coach", () => {
     }
   }
 
-  async function sendPayload(opts: { text?: string; action?: string }) {
+  async function sendPayload(opts: {
+    text?: string;
+    action?: string;
+    answers?: { question_id: string; text: string }[];
+  }) {
     if (!sessionId.value || busy.value) return;
     const action = opts.action || "";
     const text = opts.text || "";
+    const answers = opts.answers || [];
     const hasAction = Boolean(action);
     const hasText = Boolean(text.trim());
-    if (!hasAction && !hasText) return;
+    const hasAnswers = answers.length > 0;
+    if (!hasAction && !hasText && !hasAnswers) return;
 
     busy.value = true;
     clearChoices();
 
-    if (hasText) addMsg(text.trim(), "user");
+    if (hasAnswers) {
+      const summary = answers.map((a) => a.text).filter(Boolean).join("；");
+      addMsg(summary || "【已提交澄清回答】", "user");
+    } else if (hasText) addMsg(text.trim(), "user");
     else if (hasAction) {
       addMsg(`〔${ACTION_LABELS[action] || action}〕`, "user");
     }
@@ -218,11 +301,12 @@ export const useCoachStore = defineStore("coach", () => {
           session_id: sessionId.value,
           message: hasText ? text.trim() : "",
           action: action || "",
+          answers: hasAnswers ? answers : undefined,
         }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        showBanner(data.message || "发送失败");
+        showErrorBanner(data.message, "发送失败，请稍后再试");
         removeMsg(coachMsg.id);
         if (data.reopen_required || data.code === "session_abandoned") {
           disableComposer();
@@ -259,6 +343,78 @@ export const useCoachStore = defineStore("coach", () => {
           if (prompt) updateMsg(coachMsg.id, prompt);
           const m = messages.value.find((x) => x.id === coachMsg.id);
           if (m) m.choices = choices;
+        } else if (event === "ask_user" || data.type === "ask_user") {
+          const questions = Array.isArray(data.questions) ? data.questions : [];
+          const payload: AskUserPayload = {
+            intro: data.intro ? String(data.intro) : undefined,
+            questions: questions.map((q: Record<string, unknown>, i: number) => ({
+              id: String(q.id || `q${i + 1}`),
+              prompt: String(q.prompt || ""),
+              header: q.header ? String(q.header) : undefined,
+              options: Array.isArray(q.options)
+                ? q.options.map((o: Record<string, unknown> | string) =>
+                    typeof o === "string"
+                      ? { label: o }
+                      : {
+                          label: String(o.label || ""),
+                          description: o.description
+                            ? String(o.description)
+                            : undefined,
+                        },
+                  )
+                : undefined,
+              multi_select: Boolean(q.multi_select),
+              allow_free_text: q.allow_free_text !== false,
+              placeholder: q.placeholder ? String(q.placeholder) : undefined,
+            })),
+          };
+          pendingAsk.value = payload;
+          awaitingAskUser.value = true;
+          askDrafts.value = {};
+          const m = messages.value.find((x) => x.id === coachMsg.id);
+          if (m) {
+            if (payload.intro) updateMsg(coachMsg.id, payload.intro);
+            m.askUser = payload;
+          }
+        } else if (event === "solve_progress" || data.type === "solve_progress") {
+          const steps = Array.isArray(data.steps) ? data.steps : [];
+          const progress: SolveProgress = {
+            analysis: data.analysis ? String(data.analysis) : undefined,
+            steps: steps.map((s: Record<string, unknown>) => ({
+              id: String(s.id || ""),
+              goal: String(s.goal || ""),
+              done: Boolean(s.done),
+              summary: s.summary ? String(s.summary) : undefined,
+            })),
+            next: (() => {
+              const n = data.next as Record<string, unknown> | null | undefined;
+              if (!n || typeof n !== "object") return null;
+              return {
+                id: String(n.id || ""),
+                goal: String(n.goal || ""),
+                done: Boolean(n.done),
+              };
+            })(),
+            all_done: Boolean(data.all_done),
+          };
+          latestSolve.value = progress;
+          const m = messages.value.find((x) => x.id === coachMsg.id);
+          if (m) m.solveProgress = progress;
+        } else if (event === "code_result" || data.type === "code_result") {
+          const cr: CodeResultView = {
+            language: String(data.language || "python"),
+            exit_code: Number(data.exit_code ?? -1),
+            timed_out: Boolean(data.timed_out),
+            stdout_preview: data.stdout_preview
+              ? String(data.stdout_preview)
+              : undefined,
+            stderr_preview: data.stderr_preview
+              ? String(data.stderr_preview)
+              : undefined,
+            error: data.error ? String(data.error) : undefined,
+          };
+          const m = messages.value.find((x) => x.id === coachMsg.id);
+          if (m) m.codeResult = cr;
         } else if (
           event === "token" ||
           data.type === "token" ||
@@ -279,19 +435,30 @@ export const useCoachStore = defineStore("coach", () => {
           showBanner(String(data.message || "可以结束或看思路了"));
         } else if (event === "fallback" || data.type === "fallback") {
           if (data.text) appendMsg(coachMsg.id, String(data.text));
-          showBanner(String(data.message || "模型暂时不可用，已切换到备用回复。"));
+          showBanner(
+            toUserMessage(
+              data.message,
+              "模型暂时不可用，已切换到备用回复。",
+            ),
+          );
           if (data.reopen_required || data.session_abandoned) {
             disableComposer();
             sessionId.value = "";
           }
         } else if (event === "error" || data.type === "error") {
-          showBanner(String(data.message || "对话出错"));
+          showErrorBanner(data.message, "对话出了点问题，请稍后再试");
           if (data.reopen_required || data.code === "session_abandoned") {
             disableComposer();
             sessionId.value = "";
           }
         } else if (event === "done" || data.type === "done") {
           finished = true;
+          if (data.awaiting === "ask_user") {
+            awaitingAskUser.value = true;
+          } else {
+            awaitingAskUser.value = false;
+            pendingAsk.value = null;
+          }
           if (data.done) {
             disableComposer();
             sessionId.value = "";
@@ -300,13 +467,13 @@ export const useCoachStore = defineStore("coach", () => {
         }
       });
       const m = messages.value.find((x) => x.id === coachMsg.id);
-      if (!m?.text) {
+      if (!m?.text && !m?.askUser && !m?.solveProgress && !m?.codeResult) {
         if (!finished) updateMsg(coachMsg.id, "（无回复）");
         else removeMsg(coachMsg.id);
       }
     } catch (err) {
       removeMsg(coachMsg.id);
-      showBanner(err instanceof Error ? err.message : "发送失败");
+      showErrorBanner(err, "发送失败，请稍后再试");
     } finally {
       busy.value = false;
     }
@@ -318,6 +485,35 @@ export const useCoachStore = defineStore("coach", () => {
     if (!text) return;
     inputText.value = text;
     await sendPayload({ text });
+  }
+
+  function setAskDraft(questionId: string, text: string) {
+    askDrafts.value = { ...askDrafts.value, [questionId]: text };
+  }
+
+  function pickAskOption(questionId: string, label: string) {
+    const q = pendingAsk.value?.questions.find((x) => x.id === questionId);
+    if (q?.multi_select) {
+      const cur = askDrafts.value[questionId] || "";
+      const parts = cur ? cur.split("、").filter(Boolean) : [];
+      if (!parts.includes(label)) parts.push(label);
+      setAskDraft(questionId, parts.join("、"));
+    } else {
+      setAskDraft(questionId, label);
+    }
+  }
+
+  async function submitAskUser() {
+    if (!pendingAsk.value) return;
+    const answers = pendingAsk.value.questions.map((q) => ({
+      question_id: q.id,
+      text: (askDrafts.value[q.id] || "").trim(),
+    }));
+    if (!answers.some((a) => a.text)) {
+      showBanner("请至少回答一道题");
+      return;
+    }
+    await sendPayload({ action: "submit_user_reply", answers });
   }
 
   async function init(params: {
@@ -361,10 +557,19 @@ export const useCoachStore = defineStore("coach", () => {
         await loadHint(params.problemId);
         return;
       }
-      showBanner("请从题目页或仪表盘进入陪练");
+      // 无参进入：大厅会话（可生成计划 / 闲聊）
+      await startWithMode("lobby");
+      showBanner("大厅模式：可聊刷题计划，或从题目页带题号进入跟练。");
     } catch {
       showBanner("暂时无法连接服务，请稍后再试");
     }
+  }
+
+  async function reopenLobby() {
+    hideBanner();
+    messages.value = [];
+    sessionId.value = "";
+    await startWithMode("lobby");
   }
 
   return {
@@ -377,6 +582,10 @@ export const useCoachStore = defineStore("coach", () => {
     messages,
     composerEnabled,
     inputText,
+    awaitingAskUser,
+    pendingAsk,
+    askDrafts,
+    latestSolve,
     showBanner,
     hideBanner,
     addMsg,
@@ -384,6 +593,10 @@ export const useCoachStore = defineStore("coach", () => {
     disableComposer,
     sendPayload,
     sendChoice,
+    setAskDraft,
+    pickAskOption,
+    submitAskUser,
     init,
+    reopenLobby,
   };
 });

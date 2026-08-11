@@ -55,6 +55,18 @@ public class CoachSessionService {
             if (existing.isPresent()) {
                 return existing.get();
             }
+        } else if ("lobby".equals(safeMode)
+                || (("default".equals(safeMode) || safeMode.isBlank())
+                        && (problemId == null || problemId <= 0)
+                        && sid == null
+                        && safeTopic.isBlank())) {
+            Optional<CoachSessionEntity> existing =
+                    sessionRepository.findFirstByUserIdAndSessionKindAndStatusOrderByUpdatedAtDesc(
+                            user.getId(), "lobby", CoachSessionEntity.STATUS_ACTIVE);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+            safeMode = "lobby";
         }
 
         CoachSessionEntity session = new CoachSessionEntity();
@@ -214,21 +226,20 @@ public class CoachSessionService {
 
     private static String buildOpening(CoachSessionEntity session) {
         if (session.getTopic() != null && !session.getTopic().isBlank()) {
-            return "专题陪练已就绪：「"
+            return "这轮我们围着「"
                     + session.getTopic()
-                    + "」。可以聊进度、卡点与薄弱基础；报题号可进入单题跟练。";
+                    + "」练。可以说说最近卡在哪，或直接报题号进单题。";
         }
         if (session.getProblemId() != null) {
-            return "陪练会话已就绪。当前绑定题号 "
+            return "好，这题是 "
                     + session.getProblemId()
-                    + "。可以直接提问卡点，或让我根据你的提交给思路检查点。";
+                    + "。卡住的地方直接说，也可以让我先看你最近一次提交，再一起拆思路。";
         }
         if (isProfileMode(session.getMode())) {
-            return "陪练会话已就绪（模式："
-                    + session.getMode()
-                    + "）。可以说「今天怎么样」或让我推荐下一题。";
+            return "我在。想听今日回顾可以说「今天怎么样」，想选题可以说「推荐一题」。";
         }
-        return "陪练会话已就绪。可以报题号开始，或让我根据未通过题/薄弱点给你下一步。";
+        return "我在陪练大厅。可以说目标（比如「准备 Google 面试 30 天」），"
+                + "或直接报题号开始跟练。";
     }
 
     private static boolean isProfileMode(String mode) {

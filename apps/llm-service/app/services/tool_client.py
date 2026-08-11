@@ -7,11 +7,18 @@ LLM 只决策 tool_name/params；数据访问一律回调 business-service
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any, Optional
 
 import httpx
 
 from app.config import Settings, get_settings
+from app.observability.logging_setup import log_extra
+from app.observability.request_context import get_request_id
+from app.observability.skywalking_agent import tool_span
+
+logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 3
 
@@ -282,7 +289,7 @@ JAVA_TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
-# 仅依赖会话消息，不回调 Java
+# 仅依赖会话消息 / 本地沙箱，不回调 Java
 LOCAL_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "type": "function",
@@ -296,12 +303,154 @@ LOCAL_TOOL_SPECS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "code_execution",
+            "description": (
+                "在安全沙箱中运行短代码片段以验证思路或样例。"
+                "仅支持 python；禁止输出完整可提交题解；不要读取库内 AC 源码。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "language": {
+                        "type": "string",
+                        "description": "python（P0）",
+                    },
+                    "code": {"type": "string", "description": "要执行的源码"},
+                    "stdin": {"type": "string", "description": "可选标准输入"},
+                    "timeout": {
+                        "type": "integer",
+                        "description": "超时秒数 1～60，默认 10",
+                    },
+                },
+                "required": ["language", "code"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "solve_plan",
+            "description": (
+                "题内跟练：先给出简短 analysis 与有序步骤（2～6 步），再逐步辅导。"
+                "步骤 id 由系统生成（S1…）。未 plan 前不要长篇题解。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "analysis": {
+                        "type": "string",
+                        "description": "一两句：题意与思路",
+                    },
+                    "steps": {
+                        "type": "array",
+                        "description": "有序步骤，每项 {goal}",
+                        "items": {
+                            "type": "object",
+                            "properties": {"goal": {"type": "string"}},
+                            "required": ["goal"],
+                        },
+                    },
+                },
+                "required": ["analysis", "steps"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "solve_finish_step",
+            "description": "标记当前步骤完成并推进；传入 step_id 与短摘要。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "step_id": {"type": "string", "description": "如 S1"},
+                    "summary": {"type": "string", "description": "该步结论摘要"},
+                },
+                "required": ["step_id", "summary"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "solve_replan",
+            "description": "因卡点替换计划步骤；同一会话最多 2 次。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reason": {"type": "string"},
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"goal": {"type": "string"}},
+                            "required": ["goal"],
+                        },
+                    },
+                },
+                "required": ["reason", "steps"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ask_user",
+            "description": (
+                "需要澄清关键约束时调用（1～4 题，可选项/自由文本）。"
+                "调用后本回合暂停，等待前端 submit_user_reply；不要猜测缺失信息。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "intro": {"type": "string"},
+                    "questions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "prompt": {"type": "string"},
+                                "header": {"type": "string"},
+                                "options": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "label": {"type": "string"},
+                                            "description": {"type": "string"},
+                                        },
+                                    },
+                                },
+                                "multi_select": {"type": "boolean"},
+                                "allow_free_text": {"type": "boolean"},
+                                "placeholder": {"type": "string"},
+                            },
+                            "required": ["prompt"],
+                        },
+                    },
+                },
+                "required": ["questions"],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 TOOL_SPECS: list[dict[str, Any]] = JAVA_TOOL_SPECS + LOCAL_TOOL_SPECS
 
 JAVA_TOOL_NAMES = frozenset(
     str(spec["function"]["name"]) for spec in JAVA_TOOL_SPECS
+)
+LOCAL_TOOL_NAMES = frozenset(
+    str(spec["function"]["name"]) for spec in LOCAL_TOOL_SPECS
 )
 
 
@@ -312,11 +461,15 @@ class JavaToolClient:
         self.settings = settings or get_settings()
 
     def _headers(self, user_public_id: str) -> dict[str, str]:
-        return {
+        headers = {
             "Content-Type": "application/json",
             "X-Internal-Token": self.settings.internal_tool_token,
             "X-User-Public-Id": user_public_id or "",
         }
+        rid = get_request_id()
+        if rid:
+            headers["X-Request-Id"] = rid
+        return headers
 
     async def exec_tool(
         self,
@@ -327,8 +480,8 @@ class JavaToolClient:
         problem_id: Optional[int] = None,
         user_public_id: str = "",
     ) -> dict[str, Any]:
-        if tool_name == "get_last_advice":
-            raise ValueError("get_last_advice is local-only; do not call Java")
+        if tool_name in LOCAL_TOOL_NAMES:
+            raise ValueError(f"{tool_name} is local-only; do not call Java")
         url = f"{self.settings.business_internal_url.rstrip('/')}/internal/tools/exec"
         payload = {
             "tool_name": tool_name,
@@ -336,13 +489,43 @@ class JavaToolClient:
             "session_id": session_id,
             "problem_id": problem_id,
         }
-        async with httpx.AsyncClient(timeout=self.settings.llm_timeout_seconds) as client:
-            resp = await client.post(
-                url, json=payload, headers=self._headers(user_public_id)
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data if isinstance(data, dict) else {"ok": False, "note": "invalid response"}
+        t0 = time.perf_counter()
+        with tool_span(tool_name, session_id=session_id):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self.settings.llm_timeout_seconds,
+                    trust_env=False,
+                ) as client:
+                    resp = await client.post(
+                        url, json=payload, headers=self._headers(user_public_id)
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                dur = (time.perf_counter() - t0) * 1000
+                logger.info(
+                    "tool ok name=%s",
+                    tool_name,
+                    extra=log_extra(
+                        request_id=get_request_id(),
+                        tool_name=tool_name,
+                        session_id=session_id,
+                        duration_ms=dur,
+                    ),
+                )
+                return data if isinstance(data, dict) else {"ok": False, "note": "invalid response"}
+            except Exception:
+                dur = (time.perf_counter() - t0) * 1000
+                logger.exception(
+                    "tool failed name=%s",
+                    tool_name,
+                    extra=log_extra(
+                        request_id=get_request_id(),
+                        tool_name=tool_name,
+                        session_id=session_id,
+                        duration_ms=dur,
+                    ),
+                )
+                raise
 
     def exec_tool_sync(
         self,
@@ -355,21 +538,22 @@ class JavaToolClient:
         history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """同步入口（LangGraph 同步节点可用）；返回 JSON 字符串。"""
-        if tool_name == "get_last_advice":
-            advice = ""
-            for msg in reversed(history or []):
-                if msg.get("role") == "assistant" and msg.get("content"):
-                    advice = str(msg["content"])
-                    break
-            return json.dumps(
-                {
-                    "ok": bool(advice),
-                    "advice": advice,
-                    "note": "本地会话历史" if advice else "无历史建议",
-                    "executor": "llm-service-local",
+        if tool_name in LOCAL_TOOL_NAMES:
+            from app.coach.local_tools import execute_local_tool
+
+            local = execute_local_tool(
+                tool_name=tool_name,
+                params=params,
+                state={
+                    "session_id": session_id,
+                    "user_public_id": user_public_id,
+                    "problem_id": problem_id,
                 },
-                ensure_ascii=False,
+                history=history or [],
             )
+            if local is not None:
+                return local.content
+            raise ValueError(f"local tool {tool_name} failed to execute")
 
         url = f"{self.settings.business_internal_url.rstrip('/')}/internal/tools/exec"
         payload = {
@@ -378,8 +562,40 @@ class JavaToolClient:
             "session_id": session_id,
             "problem_id": problem_id,
         }
-        with httpx.Client(timeout=self.settings.llm_timeout_seconds) as client:
-            resp = client.post(url, json=payload, headers=self._headers(user_public_id))
-            resp.raise_for_status()
-            data = resp.json()
-        return json.dumps(data, ensure_ascii=False)
+        t0 = time.perf_counter()
+        with tool_span(tool_name, session_id=session_id):
+            try:
+                with httpx.Client(
+                    timeout=self.settings.llm_timeout_seconds,
+                    trust_env=False,
+                ) as client:
+                    resp = client.post(
+                        url, json=payload, headers=self._headers(user_public_id)
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                dur = (time.perf_counter() - t0) * 1000
+                logger.info(
+                    "tool ok name=%s",
+                    tool_name,
+                    extra=log_extra(
+                        request_id=get_request_id(),
+                        tool_name=tool_name,
+                        session_id=session_id,
+                        duration_ms=dur,
+                    ),
+                )
+                return json.dumps(data, ensure_ascii=False)
+            except Exception:
+                dur = (time.perf_counter() - t0) * 1000
+                logger.exception(
+                    "tool failed name=%s",
+                    tool_name,
+                    extra=log_extra(
+                        request_id=get_request_id(),
+                        tool_name=tool_name,
+                        session_id=session_id,
+                        duration_ms=dur,
+                    ),
+                )
+                raise

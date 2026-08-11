@@ -24,14 +24,16 @@ services:
       retries: 5
 
   redis:
-    image: redis:7
+    # RedisJSON 等模块：LangGraph checkpoint 需要 JSON.SET
+    image: redis/redis-stack-server:latest
     container_name: codearena-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-6380}:6379"
     volumes:
       - codearena_redis_data:/data
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      REDIS_ARGS: "--appendonly yes"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

@@ -29,7 +29,6 @@ flowchart LR
 | 用户 | `/api/users/**` | Java |
 | 题目 / 统计 / 掌握 | `/api/problems/**`、`/api/stats/**`、`/api/mastered` | Java |
 | 学习 / 题单 / 复习 | `/api/learning/**`、`/api/lists/**`、`/api/review/**` | Java |
-| 组队 / 支付 | `/api/team/**`、`/api/pay/**` | Java |
 | 运维（配置/图谱/统计重建） | `/api/ops/**`（含 llm 配置入口） | Java |
 | 陪练：会话 / 开场 / 提示 | `/api/coach/session`、`/prepare`、`/hint` | **Java**（读业务库、组上下文） |
 | 陪练：多轮对话 SSE | `/api/coach/stream` | **Python**（LangGraph） |

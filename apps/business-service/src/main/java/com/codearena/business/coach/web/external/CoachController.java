@@ -3,12 +3,17 @@ package com.codearena.business.coach.web.external;
 import com.codearena.business.coach.memory.domain.CoachSessionEntity;
 import com.codearena.business.coach.memory.domain.CoachTurnEntity;
 import com.codearena.business.coach.memory.service.CoachSessionService;
+import com.codearena.business.problem.domain.ProblemEntity;
+import com.codearena.business.problem.domain.ProblemRepository;
+import com.codearena.business.submission.domain.SubmissionEntity;
+import com.codearena.business.submission.domain.SubmissionRepository;
 import com.codearena.business.user.domain.UserEntity;
 import com.codearena.business.user.service.CurrentUserService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,12 +32,16 @@ public class CoachController {
 
     private final CurrentUserService currentUserService;
     private final CoachSessionService sessionService;
+    private final SubmissionRepository submissionRepository;
+    private final ProblemRepository problemRepository;
 
     @GetMapping({"/api/coach/hint", "/api/coach/hint/{pathProblemId}"})
     public ResponseEntity<Map<String, Object>> hint(
+            HttpServletRequest request,
             @PathVariable(required = false) Integer pathProblemId,
             @RequestParam(required = false) Integer problem_id,
             @RequestParam(required = false) String slug) {
+        UserEntity user = currentUserService.require(request);
         Integer pid = pathProblemId != null ? pathProblemId : problem_id;
         if (pid == null && (slug == null || slug.isBlank())) {
             return ResponseEntity.badRequest()
@@ -42,17 +51,56 @@ public class CoachController {
                             "message",
                             "需要 problem_id 或已在库中的 slug；先在题目页提交一次可自动同步题号"));
         }
-        int resolved = pid != null ? pid : -1;
+
+        Integer resolvedPid = pid;
+        if (resolvedPid == null) {
+            final String slugKey = slug.trim();
+            resolvedPid = problemRepository.findAll().stream()
+                    .filter(p -> slugKey.equalsIgnoreCase(p.getSlug()))
+                    .map(ProblemEntity::getProblemId)
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (resolvedPid == null || resolvedPid <= 0) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("status", "error", "message", "无法解析题号"));
+        }
+
+        final int problemIdKey = resolvedPid;
+        Optional<SubmissionEntity> latest = submissionRepository
+                .findFirstByProblemIdAndUserIdOrderBySubmittedAtDesc(problemIdKey, user.getId())
+                .or(() -> submissionRepository.findFirstByProblemIdOrderBySubmittedAtDesc(problemIdKey));
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", "ok");
-        body.put("problem_id", resolved);
+        body.put("problem_id", problemIdKey);
         body.put("slug", slug == null || slug.isBlank() ? null : slug.trim());
-        body.put(
-                "hint",
-                "[java] 题目 "
-                        + (resolved > 0 ? resolved : slug)
-                        + " 的提示将由 business 基于题库/提交生成；对话请走 /api/coach/stream");
         body.put("owner", "business-service");
+        if (latest.isPresent()) {
+            SubmissionEntity sub = latest.get();
+            body.put("latest_submission_id", sub.getSubmissionId());
+            body.put("latest_status", sub.getStatus());
+            body.put(
+                    "suggestion",
+                    "已关联本题最近提交（"
+                            + (sub.getStatus() == null ? "未知状态" : sub.getStatus())
+                            + "）。可以直接提问或点「看思路」。");
+            body.put(
+                    "hint",
+                    "题目 "
+                            + problemIdKey
+                            + " 最近提交 "
+                            + sub.getSubmissionId()
+                            + " · "
+                            + (sub.getStatus() == null ? "?" : sub.getStatus()));
+        } else {
+            body.put("latest_submission_id", null);
+            body.put(
+                    "suggestion",
+                    "本题在本系统还没有同步到的提交记录。仍可直接开聊；"
+                            + "在力扣提交且扩展同步成功后，会自动关联代码与状态。");
+            body.put("hint", "题目 " + problemIdKey + " 暂无本地提交；可先讨论题意与思路。");
+        }
         return ResponseEntity.ok(body);
     }
 
@@ -71,7 +119,11 @@ public class CoachController {
         }
         if ((sid == null || sid.isBlank()) && problem_id == null) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("status", "error", "message", "submission_id or problem_id or session_id required"));
+                    .body(Map.of(
+                            "status",
+                            "error",
+                            "message",
+                            "submission_id or problem_id or session_id required"));
         }
         return sessionService
                 .findReusable(user, sid, problem_id)
@@ -96,7 +148,15 @@ public class CoachController {
         String topic = str(bodyIn.get("topic"));
         Integer problemId = toInt(bodyIn.get("problem_id"));
 
+        if (isBlank(mode)
+                && isBlank(submissionId)
+                && problemId == null
+                && isBlank(topic)) {
+            mode = "lobby";
+        }
+
         if (!isProfileMode(mode)
+                && !isLobbyMode(mode)
                 && isBlank(submissionId)
                 && problemId == null
                 && isBlank(topic)) {
@@ -112,7 +172,7 @@ public class CoachController {
                 user,
                 isBlank(submissionId) ? null : submissionId,
                 problemId,
-                mode,
+                isBlank(mode) ? "default" : mode,
                 isBlank(topic) ? null : topic);
         Map<String, Object> body = sessionBody(session, user, false);
         body.put("owner", "business-service");
@@ -148,6 +208,10 @@ public class CoachController {
 
     private static boolean isProfileMode(String mode) {
         return "daily_review".equals(mode) || "recommend".equals(mode) || "review".equals(mode);
+    }
+
+    private static boolean isLobbyMode(String mode) {
+        return "lobby".equals(mode) || "default".equals(mode);
     }
 
     private static String firstNonBlank(String a, String b) {

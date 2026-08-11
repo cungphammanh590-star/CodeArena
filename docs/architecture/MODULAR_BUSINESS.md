@@ -55,22 +55,20 @@ com.codearena.business/
 | `learning.*` | learning / lists / mastered / review | prefs · lists · flags | 已迁入并分子域；面试计划将做实 `learning.plan`（见 [COACH_PLAN_AGENT.md](./COACH_PLAN_AGENT.md)） |
 | `coach` | `/api/coach/**` · `/internal/tools/**` | 会话编排 + 记忆；stream 在 llm-service | 见 [COACH_TOOLS.md](./COACH_TOOLS.md)、[COACH_MEMORY.md](./COACH_MEMORY.md) |
 | `ops` | `/api/ops/**` | 运维台 | 已迁入 |
-| `team` | `/api/team/**` | `team_*` | 桩 |
-| `pay` | `/api/pay/**` | `pay_*` | 桩 |
 | `shared` | `/health` | 无业务表 | 平台横切 |
+
+> `team` / `pay` 空桩 API 已摘除（见 [PROJECT_REVIEW.md](./PROJECT_REVIEW.md)）；`team_*` 表可保留，有真实需求再建域。
 
 ## Gateway
 
 `application.yml` / `application-nacos.yml` 中 **域路由写在 `/api/**` catch-all 之前**：
 
-- `domain-team` → 今 `business-service`，明后可改 `team-service`
-- `domain-pay` → 同上 → `payment-service`
-- `domain-users` → 同上 → `user-service`
+- `domain-users` → 今 `business-service`，明后可改 `user-service`
 
 拆分步骤（有需要时）：
 
-1. 新建 `apps/team-service`，搬 `team` 包与 `team_*` 迁移归属  
-2. Gateway `domain-team` 的 `uri` 改为新服务  
+1. 新建目标服务（如 `apps/user-service`），搬对应包与迁移归属  
+2. Gateway 域路由的 `uri` 改为新服务  
 3. 滚动发布：先起新服务，再切路由，再缩旧实例 —— **无需「整站停机维护窗口」**
 
 ## 后续：Maven `*-api` 编译期隔离（规划）
@@ -85,8 +83,6 @@ com.codearena.business/
 
 ```bash
 curl -s http://127.0.0.1:8090/health
-curl -s http://127.0.0.1:8090/api/team/health
-curl -s http://127.0.0.1:8090/api/pay/health
 curl -s http://127.0.0.1:8090/api/users/health
 ```
 

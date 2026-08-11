@@ -48,24 +48,6 @@ spring:
                 name: llmService
                 fallbackUri: forward:/fallback/llm
         # Domain routes (today → business-service; later change URI only)
-        - id: domain-team
-          uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
-          predicates:
-            - Path=/api/team/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: businessService
-                fallbackUri: forward:/fallback/business
-        - id: domain-pay
-          uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
-          predicates:
-            - Path=/api/pay/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: businessService
-                fallbackUri: forward:/fallback/business
         - id: domain-users
           uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
           predicates:

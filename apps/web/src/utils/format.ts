@@ -67,6 +67,62 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${h} 小时${m ? ` ${m} 分` : ""}`;
 }
 
+/** 展示用时间：去掉秒，今天只显示时分，更远用月日。 */
+export function formatDisplayTime(raw: string | null | undefined): string {
+  if (!raw || raw === "—") return "—";
+  const d = parseFlexibleDate(raw);
+  if (!d) return String(raw).replace(/:\d{2}(?=\s|$)/, "").trim() || "—";
+
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  if (sameDay) return hm;
+
+  const yday = new Date(now);
+  yday.setDate(now.getDate() - 1);
+  const isYesterday =
+    d.getFullYear() === yday.getFullYear() &&
+    d.getMonth() === yday.getMonth() &&
+    d.getDate() === yday.getDate();
+  if (isYesterday) return `昨天 ${hm}`;
+
+  if (d.getFullYear() === now.getFullYear()) {
+    return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+  }
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/** 「已更新」类文案：只到分钟。 */
+export function formatClockMinute(date: Date = new Date()): string {
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
+}
+
+function parseFlexibleDate(raw: string): Date | null {
+  const s = raw.trim();
+  // 常见：2026-08-11 12:34:56 / ISO / 带 T
+  const normalized = s.includes("T") ? s : s.replace(" ", "T");
+  const d = new Date(normalized);
+  if (!Number.isNaN(d.getTime())) return d;
+  const m = s.match(
+    /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::\d{2})?)?/,
+  );
+  if (!m) return null;
+  return new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    m[4] != null ? Number(m[4]) : 0,
+    m[5] != null ? Number(m[5]) : 0,
+  );
+}
+
 export function leetcodeUrl(slug: string | null | undefined): string | null {
   if (!slug || /^problem-\d+$/i.test(slug)) return null;
   return `https://leetcode.cn/problems/${encodeURIComponent(slug)}/`;

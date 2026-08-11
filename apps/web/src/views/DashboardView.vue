@@ -6,7 +6,6 @@ import MetricCard from "@/components/MetricCard.vue";
 import DayNavigator from "@/components/DayNavigator.vue";
 import Pager from "@/components/Pager.vue";
 import WeekBars from "@/components/WeekBars.vue";
-import LearningPrefs from "@/components/LearningPrefs.vue";
 import { useStatsStore } from "@/stores/stats";
 import { useLearningStore } from "@/stores/learning";
 import {
@@ -14,6 +13,7 @@ import {
   shiftDate,
   paginate,
   formatStatusCounts,
+  formatDisplayTime,
 } from "@/utils/format";
 
 const PAGE_SIZE = 8;
@@ -23,6 +23,7 @@ const learning = useLearningStore();
 const {
   selectedDate,
   statusText,
+  currentUsername,
   todaySubmissions,
   todayAccepted,
   streakDays,
@@ -103,19 +104,24 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AppHeader title="CodeArena">
+  <AppHeader title="今日进度">
     <template #subtitle>
       <span>{{ statusText }}</span>
-      ·
-      <RouterLink to="/ops">维护台</RouterLink>
-      · LeetCode 刷题追踪
-    </template>
-    <template #actions>
-      <LearningPrefs />
+      <template v-if="currentUsername">
+        · {{ currentUsername }}
+      </template>
     </template>
   </AppHeader>
 
   <main class="page-main">
+    <section class="hero-cta">
+      <div>
+        <h2>开始陪练</h2>
+        <p>卡住时直接聊，或从最近提交进单题复盘。</p>
+      </div>
+      <RouterLink class="btn-primary" to="/coach">去陪练</RouterLink>
+    </section>
+
     <DayNavigator
       :selected-date="selectedDate"
       :is-today="isViewingToday"
@@ -172,9 +178,7 @@ onUnmounted(() => {
           </tr>
         </tbody>
       </table>
-      <p v-else class="sub" style="margin: 0; font-size: 13px">
-        今天没有到期复习题
-      </p>
+      <p v-else class="empty">今天没有到期复习。去做一题或去陪练聊聊计划。</p>
     </section>
 
     <section class="section-card">
@@ -263,7 +267,7 @@ onUnmounted(() => {
             <td>{{ p.total_attempts }}</td>
             <td>{{ p.accepted_count }}</td>
             <td>{{ Math.round((p.struggle_score || 0) * 100) }}%</td>
-            <td>{{ p.last_submitted_at || "—" }}</td>
+            <td class="time-cell">{{ formatDisplayTime(p.last_submitted_at) }}</td>
           </tr>
         </tbody>
       </table>
@@ -326,11 +330,15 @@ onUnmounted(() => {
             <th>时间</th>
             <th>题目</th>
             <th>状态</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
+          <tr v-if="!recent.length">
+            <td colspan="4">暂无提交。用扩展同步力扣提交后会出现在这里。</td>
+          </tr>
           <tr v-for="(i, idx) in recent" :key="idx">
-            <td>{{ i.submitted_at }}</td>
+            <td class="time-cell">{{ formatDisplayTime(i.submitted_at) }}</td>
             <td>
               <RouterLink
                 class="link-title"
@@ -340,6 +348,14 @@ onUnmounted(() => {
               </RouterLink>
             </td>
             <td :class="{ ok: i.status === 'Accepted' }">{{ i.status }}</td>
+            <td>
+              <RouterLink
+                class="link-title"
+                :to="`/coach?submission=${encodeURIComponent(String(i.submission_id || ''))}&problem_id=${i.problem_id}`"
+              >
+                陪练
+              </RouterLink>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -367,9 +383,21 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   background: #fff;
   border-radius: 8px;
-  padding: 7px 10px;
+  padding: 10px 12px;
   font: inherit;
   font-size: 13px;
   color: var(--ink);
+  min-height: 40px;
+}
+.hero-cta :deep(.btn-primary),
+.hero-cta.btn-primary,
+a.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+a.btn-primary:hover {
+  text-decoration: none;
 }
 </style>

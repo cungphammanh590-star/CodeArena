@@ -18,24 +18,6 @@ spring:
               args:
                 name: llmService
                 fallbackUri: forward:/fallback/llm
-        - id: domain-team
-          uri: lb://business-service
-          predicates:
-            - Path=/api/team/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: businessService
-                fallbackUri: forward:/fallback/business
-        - id: domain-pay
-          uri: lb://business-service
-          predicates:
-            - Path=/api/pay/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: businessService
-                fallbackUri: forward:/fallback/business
         - id: domain-users
           uri: lb://business-service
           predicates:

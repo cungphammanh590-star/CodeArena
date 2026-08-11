@@ -5,6 +5,7 @@ import {
   loginWithPassword,
   registerWithPassword,
 } from "@/api/client";
+import { toUserMessage } from "@/utils/userMessage";
 
 const router = useRouter();
 const route = useRoute();
@@ -33,17 +34,15 @@ async function submit() {
       typeof route.query.redirect === "string" ? route.query.redirect : "/";
     await router.replace(redirect || "/");
   } catch (e: unknown) {
-    const any = e as {
-      response?: { data?: { message?: string }; status?: number };
-      message?: string;
-    };
-    const msg =
-      any?.response?.data?.message ||
-      (any?.response?.status === 401
-        ? "用户名或密码不正确"
-        : any?.message) ||
-      "登录失败，请稍后再试";
-    error.value = String(msg);
+    const status =
+      e && typeof e === "object" && "response" in e
+        ? (e as { response?: { status?: number } }).response?.status
+        : undefined;
+    if (status === 401) {
+      error.value = "用户名或密码不正确";
+    } else {
+      error.value = toUserMessage(e, "登录失败，请稍后再试");
+    }
   } finally {
     busy.value = false;
   }
@@ -53,8 +52,9 @@ async function submit() {
 <template>
   <main class="login-page">
     <section class="panel">
-      <h1>CodeArena</h1>
-      <p class="hint">登录后同步力扣提交，并与浏览器扩展共享同一账号。</p>
+      <p class="brand">LeetMate</p>
+      <h1>{{ mode === "login" ? "登录" : "注册" }}</h1>
+      <p class="hint">同步力扣提交，并与浏览器扩展共用同一账号。</p>
 
       <label>
         用户名
@@ -73,12 +73,17 @@ async function submit() {
       <p v-if="error" class="error">{{ error }}</p>
 
       <div class="actions">
-        <button type="button" :disabled="busy" @click="mode = 'login'; submit()">
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="busy"
+          @click="mode = 'login'; submit()"
+        >
           {{ busy && mode === "login" ? "登录中…" : "登录" }}
         </button>
         <button
           type="button"
-          class="secondary"
+          class="btn-secondary"
           :disabled="busy"
           @click="mode = 'register'; submit()"
         >
@@ -96,73 +101,72 @@ async function submit() {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(ellipse 80% 60% at 20% 0%, #f3e7e1 0%, transparent 55%),
-    radial-gradient(ellipse 70% 50% at 90% 100%, #e8dfd6 0%, transparent 50%),
-    #f7f1ef;
-  color: #3f3a38;
+    radial-gradient(ellipse 70% 50% at 15% 0%, #d1fae5 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 100%, #e0f2fe 0%, transparent 50%),
+    var(--bg);
 }
 .panel {
   width: min(400px, 100%);
-  background: #fffbf9;
-  border: 1px solid #eadfd9;
+  background: var(--card);
+  border: 1px solid var(--line);
   border-radius: 16px;
   padding: 28px 24px 24px;
-  box-shadow: 0 12px 40px rgba(80, 50, 40, 0.06);
+  box-shadow: var(--shadow);
+}
+.brand {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
 }
 h1 {
   margin: 0 0 8px;
-  font-size: 28px;
-  letter-spacing: -0.02em;
+  font-size: 26px;
+  letter-spacing: -0.03em;
+  font-weight: 650;
 }
 .hint {
   margin: 0 0 20px;
-  color: #948984;
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
 }
 label {
   display: block;
-  font-size: 12px;
-  color: #948984;
-  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 14px;
 }
 input {
   display: block;
   width: 100%;
   margin-top: 6px;
   box-sizing: border-box;
-  padding: 10px 12px;
-  border: 1px solid #eadfd9;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
   border-radius: 10px;
   font: inherit;
   background: #fff;
-  color: #3f3a38;
+  color: var(--ink);
+  min-height: 44px;
+}
+input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: var(--accent);
 }
 .actions {
   display: flex;
   gap: 10px;
   margin-top: 8px;
 }
-button {
+.actions .btn-primary,
+.actions .btn-secondary {
   flex: 1;
-  border: 0;
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: #c67a88;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-}
-button.secondary {
-  background: #eadfd9;
-  color: #3f3a38;
-}
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 .error {
-  color: #c97878;
+  color: var(--danger);
   font-size: 13px;
   margin: 0 0 10px;
 }

@@ -57,6 +57,11 @@ async function doLogin() {
     setStatus("登录成功，正在打开首页…", true);
     passwordInput.value = "";
     await refreshAuthSummary();
+    try {
+      await chrome.runtime.sendMessage({ type: "flush_pending" });
+    } catch (_e) {
+      /* ignore */
+    }
     await openHomeAfterAuth();
   } catch (e) {
     setStatus(friendlyError(e), false);
@@ -91,6 +96,11 @@ async function doRegister() {
     setStatus("注册成功，正在打开首页…", true);
     passwordInput.value = "";
     await refreshAuthSummary();
+    try {
+      await chrome.runtime.sendMessage({ type: "flush_pending" });
+    } catch (_e) {
+      /* ignore */
+    }
     await openHomeAfterAuth();
   } catch (e) {
     setStatus(friendlyError(e), false);

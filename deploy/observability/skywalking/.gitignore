@@ -1,0 +1,3 @@
+# SkyWalking agent binaries (downloaded via make obs-agents)
+agent/
+*.tgz

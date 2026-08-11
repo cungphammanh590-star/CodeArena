@@ -7,6 +7,8 @@ spring:
     username: ${POSTGRES_USER:codearena}
     password: ${POSTGRES_PASSWORD:zephyr}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      leak-detection-threshold: ${HIKARI_LEAK_DETECTION_MS:20000}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -31,3 +33,10 @@ management:
       enabled: true
     redis:
       enabled: false
+
+# SQL 可见性：默认 INFO；调试时 CODEARENA_SQL_LOG_LEVEL=DEBUG
+logging:
+  level:
+    com.codearena.business: INFO
+    org.hibernate.SQL: ${CODEARENA_SQL_LOG_LEVEL:INFO}
+    org.hibernate.orm.jdbc.bind: ${CODEARENA_SQL_BIND_LEVEL:WARN}

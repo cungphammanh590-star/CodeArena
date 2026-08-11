@@ -11,7 +11,10 @@ import {
   diffClass,
   statusChangeLabel,
   statusChangeClass,
+  formatDisplayTime,
+  formatClockMinute,
 } from "@/utils/format";
+import { toUserMessage } from "@/utils/userMessage";
 
 const route = useRoute();
 const problemId = computed(() => Number(route.params.id));
@@ -59,7 +62,7 @@ function renderFromData(data: {
   }
   difficulty.value = diff;
   leetUrl.value = url;
-  statusText.value = `已更新 ${new Date().toLocaleTimeString()}`;
+  statusText.value = `已更新 ${formatClockMinute()}`;
   tags.value = (p.topic_tags as string[]) || [];
 
   metrics.value = [
@@ -87,7 +90,7 @@ function renderFromData(data: {
     { label: "最近状态", value: (p.last_status as string) || "—" },
     {
       label: "最近提交",
-      value: (p.last_submitted_at as string) || "—",
+      value: formatDisplayTime(p.last_submitted_at as string),
     },
   ];
 
@@ -96,11 +99,13 @@ function renderFromData(data: {
     false,
   );
   timeline.value = [
-    { label: "首次尝试", value: (p.first_attempt_at as string) || "—" },
-    { label: "最近尝试", value: (p.last_attempt_at as string) || "—" },
+    { label: "首次尝试", value: formatDisplayTime(p.first_attempt_at as string) },
+    { label: "最近尝试", value: formatDisplayTime(p.last_attempt_at as string) },
     {
       label: "首次 AC",
-      value: (p.first_accepted_at as string) || "尚未 AC",
+      value: p.first_accepted_at
+        ? formatDisplayTime(p.first_accepted_at as string)
+        : "尚未 AC",
     },
   ];
   daily.value = data.daily || [];
@@ -118,7 +123,7 @@ async function load() {
     const { data } = await api.get(`/problems/${pid}/stats`);
     renderFromData(data);
   } catch (err) {
-    errorText.value = `加载失败：${err}`;
+    errorText.value = toUserMessage(err, "题目详情加载失败，请稍后再试");
   }
 }
 
@@ -137,7 +142,7 @@ async function toggleMastered() {
     }
     mastered.value = next;
   } catch (err) {
-    statusText.value = String(err);
+    statusText.value = toUserMessage(err, "操作失败，请稍后再试");
   } finally {
     masterBusy.value = false;
   }
@@ -158,7 +163,7 @@ onUnmounted(() => {
 <template>
   <AppHeader :title="title">
     <template #before>
-      <RouterLink class="back" to="/">← 返回仪表盘</RouterLink>
+      <RouterLink class="back" to="/">← 仪表盘</RouterLink>
     </template>
     <template #subtitle>
       <template v-if="errorText">{{ errorText }}</template>
@@ -174,11 +179,19 @@ onUnmounted(() => {
         <span>{{ statusText }}</span>
       </template>
     </template>
+    <template #actions>
+      <RouterLink
+        class="btn-primary coach-link"
+        :to="`/coach?problem_id=${problemId}`"
+      >
+        本题陪练
+      </RouterLink>
+    </template>
     <template #after-title>
       <div v-if="masterRowVisible" class="master-row">
         <button
           type="button"
-          class="master-btn"
+          class="btn-secondary"
           :class="{ on: mastered }"
           :disabled="masterBusy"
           :title="
@@ -303,7 +316,7 @@ onUnmounted(() => {
             <td colspan="4" class="empty">暂无提交记录</td>
           </tr>
           <tr v-for="(s, idx) in submissions" :key="idx">
-            <td>{{ s.submitted_at }}</td>
+            <td class="time-cell">{{ formatDisplayTime(s.submitted_at as string) }}</td>
             <td :class="s.status === 'Accepted' ? 'ok' : 'bad'">
               {{ s.status }}
             </td>
@@ -323,6 +336,15 @@ onUnmounted(() => {
   font-size: 13px;
   display: inline-block;
   margin-bottom: 10px;
+  color: var(--muted);
+}
+.coach-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.coach-link:hover {
+  text-decoration: none;
 }
 .master-row {
   display: flex;
@@ -331,36 +353,10 @@ onUnmounted(() => {
   gap: 10px;
   margin-top: 12px;
 }
-.master-btn {
-  border: 1px solid var(--line);
-  background: #fff;
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  padding: 7px 14px;
-  border-radius: 10px;
-  cursor: pointer;
-  box-shadow: 0 1px 0 rgba(28, 25, 23, 0.04);
-}
-.master-btn:hover {
+.master-row .btn-secondary.on {
   border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--accent);
-  background: var(--accent-soft);
-}
-.master-btn.on {
-  border-color: #d4a0a8;
-  background: var(--accent-soft);
-  color: #9a5563;
-}
-.master-btn.on:hover {
-  border-color: #d48888;
-  background: #f8e8e8;
-  color: #b45c5c;
-}
-.master-btn:disabled {
-  cursor: wait;
-  opacity: 0.55;
 }
 .master-hint {
   font-size: 12px;
@@ -375,49 +371,58 @@ onUnmounted(() => {
 }
 .tag {
   font-size: 11px;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: #e7e5e4;
-  color: #44403c;
+  background: var(--soft);
+  color: var(--muted);
+  font-weight: 500;
 }
 :deep(.diff-easy) {
-  color: #6d9f82;
+  color: var(--ok);
 }
 :deep(.diff-medium) {
-  color: #d4a06a;
+  color: var(--warn);
 }
 :deep(.diff-hard) {
-  color: #c97878;
+  color: var(--danger);
 }
 .breakdown {
   font-size: 13px;
   line-height: 1.7;
-  color: #44403c;
+  color: var(--ink);
 }
 .pill {
   display: inline-block;
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #f5f5f4;
+  background: var(--soft);
 }
 .pill-improved {
-  background: #e0f0e6;
-  color: #4f7d62;
+  background: var(--ok-soft);
+  color: var(--ok);
 }
 .pill-stuck {
-  background: #f8e4e4;
-  color: #a85d5d;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .pill-declined {
-  background: #f7ead8;
-  color: #a67a45;
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 .pill-first_ac {
-  background: #e5f3ee;
-  color: #5a8f7c;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.metrics-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .metrics-grid :deep(.metric-card .value) {
-  font-size: 22px;
+  font-size: 20px;
+}
+@media (max-width: 800px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

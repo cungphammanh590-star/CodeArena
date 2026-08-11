@@ -6,17 +6,87 @@ console.info("[codearena] background loaded", {
   version: chrome.runtime.getManifest().version,
 });
 
+const PENDING_SUBMISSIONS_KEY = "pendingSubmissions";
+const MAX_PENDING = 20;
+
+async function enqueuePendingSubmission(payload) {
+  if (!payload || !payload.submission_id) return;
+  const stored = await chrome.storage.local.get([PENDING_SUBMISSIONS_KEY]);
+  const list = Array.isArray(stored[PENDING_SUBMISSIONS_KEY])
+    ? stored[PENDING_SUBMISSIONS_KEY]
+    : [];
+  const sid = String(payload.submission_id);
+  const next = list.filter((item) => String(item?.submission_id) !== sid);
+  next.unshift({ ...payload, queued_at: Date.now() });
+  await chrome.storage.local.set({
+    [PENDING_SUBMISSIONS_KEY]: next.slice(0, MAX_PENDING),
+  });
+}
+
+async function flushPendingSubmissions() {
+  if (!(await ensureAuth())) return { flushed: 0, left: 0 };
+  const stored = await chrome.storage.local.get([PENDING_SUBMISSIONS_KEY]);
+  const list = Array.isArray(stored[PENDING_SUBMISSIONS_KEY])
+    ? stored[PENDING_SUBMISSIONS_KEY]
+    : [];
+  if (!list.length) return { flushed: 0, left: 0 };
+
+  const remain = [];
+  let flushed = 0;
+  for (let i = 0; i < list.length; i++) {
+    const payload = list[i];
+    try {
+      await apiFetch("/submit", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      flushed += 1;
+      const submissionId = String(payload.submission_id || "");
+      void prepareCoach(submissionId, payload.problem_id);
+    } catch (error) {
+      if (error && error.status === 401) {
+        remain.push(...list.slice(i));
+        break;
+      }
+      // 业务错误（缺字段等）丢弃，避免死循环
+      console.warn("[codearena] pending submit dropped", String(error));
+    }
+  }
+  await chrome.storage.local.set({ [PENDING_SUBMISSIONS_KEY]: remain });
+  if (flushed > 0) {
+    setBadge("ok", "#0a7");
+    clearBadgeLater();
+    notify("提交已补同步", `成功补传 ${flushed} 条力扣提交`, null, null);
+  }
+  return { flushed, left: remain.length };
+}
+
 async function postSubmission(payload) {
   const ok = await ensureAuth();
   if (!ok) {
-    const err = new Error("请先登录账号后再同步提交");
+    await enqueuePendingSubmission(payload);
+    const err = new Error("请先登录账号后再同步提交（已暂存，登录后自动补传）");
     err.status = 401;
     throw err;
   }
-  return apiFetch("/submit", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  try {
+    return await apiFetch("/submit", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    // 网络/网关异常：暂存，避免力扣已判题但本地丢失
+    const status = error && error.status;
+    if (!status || status === 0 || status >= 500) {
+      await enqueuePendingSubmission(payload);
+      const err = new Error(
+        `${friendlyError(error)}（已暂存，服务恢复或重新登录后会自动补传）`
+      );
+      err.status = status || 0;
+      throw err;
+    }
+    throw error;
+  }
 }
 
 async function prepareCoach(submissionId, problemId) {
@@ -55,8 +125,17 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "clear-badge") {
     setBadge("", "#000000");
   }
+  if (alarm.name === "flush-pending") {
+    void flushPendingSubmissions();
+  }
 });
 
+// 每分钟尝试补传暂存提交
+try {
+  chrome.alarms.create("flush-pending", { periodInMinutes: 1 });
+} catch (_e) {
+  /* ignore */
+}
 async function remember(event) {
   await chrome.storage.local.set({
     lastEvent: { ...event, at: Date.now() },
@@ -100,8 +179,19 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || !message.type) return false;
 
+  if (message.type === "flush_pending") {
+    (async () => {
+      const result = await flushPendingSubmissions();
+      sendResponse({ ok: true, ...result });
+    })();
+    return true;
+  }
+
   if (message.type === "auth_changed") {
-    sendResponse({ ok: true });
+    (async () => {
+      const result = await flushPendingSubmissions();
+      sendResponse({ ok: true, ...result });
+    })();
     return true;
   }
 
@@ -125,16 +215,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         userDisplay:
           user.display_name || user.username || local.userDisplay,
       });
-      // 后台再校验一次
+      // 后台再校验一次，并补传登录前暂存的提交
       await ensureAuth();
-      sendResponse({ ok: true });
+      const flushed = await flushPendingSubmissions();
+      sendResponse({ ok: true, ...flushed });
     })();
-    return true;
-  }
-
-  if (message.type === "request_web_auth_pull") {
-    // content script 收到后由页面脚本响应；此处仅确认通道
-    sendResponse({ ok: true });
     return true;
   }
 
@@ -220,7 +305,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       });
       setBadge("!", "#c00");
       if (error.status === 401) {
-        notify("需要登录", "请点击扩展图标，打开「账号登录」后再同步提交", null, null);
+        notify(
+          "需要登录",
+          "提交已暂存。请打开扩展「账号登录」；登录后会自动补传到后端",
+          null,
+          null
+        );
+        try {
+          await chrome.runtime.openOptionsPage();
+        } catch (_e) {
+          /* ignore */
+        }
       } else {
         notify("同步失败", messageText, null, null);
       }
@@ -229,3 +324,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return true;
 });
+
+// SW 唤醒时尝试补传
+void flushPendingSubmissions();

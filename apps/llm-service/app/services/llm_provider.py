@@ -12,6 +12,8 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_MODEL = "deepseek-chat"
 OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 API_TIMEOUT_SECONDS = 45.0
+# 拉用户配置是轻量内网 GET，不应跟 LLM 推理共用 60s 超时
+SETTINGS_FETCH_TIMEOUT_SECONDS = 8.0
 
 
 def fetch_user_llm_settings(
@@ -26,10 +28,33 @@ def fetch_user_llm_settings(
         "X-Internal-Token": cfg.internal_tool_token,
         "X-User-Public-Id": user_public_id or "",
     }
-    with httpx.Client(timeout=cfg.llm_timeout_seconds) as client:
-        resp = client.get(url, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
+    try:
+        # trust_env=False：避免本机 HTTP(S)_PROXY/ALL_PROXY 把 127.0.0.1 打进坏代理
+        with httpx.Client(
+            timeout=SETTINGS_FETCH_TIMEOUT_SECONDS,
+            trust_env=False,
+        ) as client:
+            resp = client.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.TimeoutException as exc:
+        raise RuntimeError(
+            "暂时读不到你的模型配置，请稍后再试。"
+            "若刚改过设置，可到维护台确认后重试。"
+        ) from exc
+    except httpx.ConnectError as exc:
+        raise RuntimeError(
+            "暂时连不上配置服务，请稍后再试。"
+            "若问题持续，请确认本机服务已启动。"
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(
+            "暂时读不到你的模型配置，请稍后再试。"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError(
+            "暂时读不到你的模型配置，请稍后再试。"
+        ) from exc
     llm = data.get("llm") if isinstance(data, dict) else None
     if not isinstance(llm, dict):
         return {
@@ -53,12 +78,12 @@ def fetch_user_llm_settings(
 def build_chat_model(llm: dict[str, Any]):
     provider = str(llm.get("provider") or "ollama").strip().lower()
     if provider == "mock":
-        raise RuntimeError("provider=mock 不能驱动智能教练，请在维护台选择 Ollama 或 API")
+        raise RuntimeError("当前是演示模式，无法驱动智能教练。请到维护台选择本地模型或云端 API。")
     if provider == "ollama":
         return _build_ollama(llm)
     if provider == "api":
         return _build_api(llm)
-    raise RuntimeError(f"未知 llm.provider: {provider}")
+    raise RuntimeError("模型配置无效。请到维护台选择本地模型或云端 API。")
 
 
 def _build_ollama(llm: dict[str, Any]):
@@ -66,7 +91,7 @@ def _build_ollama(llm: dict[str, Any]):
         from langchain_ollama import ChatOllama
     except ImportError as exc:
         raise RuntimeError(
-            "缺少 langchain-ollama。请执行: pip install -r requirements.txt"
+            "本地模型组件未安装完成，暂时无法使用陪练。请联系管理员或稍后再试。"
         ) from exc
     model = str(llm.get("coach_model") or "").strip() or "qwen2.5:7b-instruct-q4_K_M"
     base = str(llm.get("base_url") or "").strip() or OLLAMA_BASE_URL
@@ -82,7 +107,7 @@ def _build_ollama(llm: dict[str, Any]):
 def _build_api(llm: dict[str, Any]):
     api_provider = str(llm.get("api_provider") or "deepseek").strip().lower() or "deepseek"
     if api_provider != "deepseek":
-        raise RuntimeError(f"暂仅支持 DeepSeek API，收到: {api_provider}")
+        raise RuntimeError("暂仅支持 DeepSeek 云端 API，请到维护台调整配置。")
     api_key = str(llm.get("api_key") or "").strip()
     if not api_key:
         raise RuntimeError("未配置 API Key。请到维护台为当前用户填写后重试。")
@@ -90,7 +115,7 @@ def _build_api(llm: dict[str, Any]):
         from langchain_openai import ChatOpenAI
     except ImportError as exc:
         raise RuntimeError(
-            "缺少 langchain-openai。请执行: pip install -r requirements.txt"
+            "云端模型组件未安装完成，暂时无法使用陪练。请联系管理员或稍后再试。"
         ) from exc
     base_url = str(llm.get("base_url") or "").strip() or DEEPSEEK_BASE_URL
     model = str(llm.get("coach_model") or "").strip() or DEEPSEEK_DEFAULT_MODEL

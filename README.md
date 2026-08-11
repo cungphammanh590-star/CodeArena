@@ -31,9 +31,12 @@ docker-compose.infra.yml  仅基础设施
 | Business | 8090 |
 | LLM | 8091 |
 | Postgres | 5432 |
-| Redis | 6379 |
+| Redis (stack) | 6380 |
 | Nacos | 8848 |
-| Prometheus / Grafana / Loki / SkyWalking | 9090 / 3000 / 3100 / 8088（profile `observability`） |
+| Prometheus / Grafana / Loki / SkyWalking | 9090 / 3000 / 3100 / 8088（`make obs-up`） |
+| Langfuse（Agent 图） | 3030（随 `make obs-up`） |
+
+可观测性接入说明：[docs/architecture/OBSERVABILITY.md](docs/architecture/OBSERVABILITY.md)
 
 ## 前置依赖
 
@@ -85,4 +88,5 @@ docker compose --profile observability up -d   # 可观测性（较重）
 ## 更多
 
 - 架构总览：[`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md)
+- 项目评价与路线：[`docs/architecture/PROJECT_REVIEW.md`](docs/architecture/PROJECT_REVIEW.md)
 - 仓库布局：[`docs/architecture/REPO_LAYOUT.md`](docs/architecture/REPO_LAYOUT.md)

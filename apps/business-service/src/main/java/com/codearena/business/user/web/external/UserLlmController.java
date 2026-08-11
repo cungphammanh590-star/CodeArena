@@ -2,6 +2,7 @@ package com.codearena.business.user.web.external;
 
 import com.codearena.business.user.domain.UserEntity;
 import com.codearena.business.user.service.CurrentUserService;
+import com.codearena.business.user.service.LlmUsageService;
 import com.codearena.business.user.service.UserLlmSettingsService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 当前用户自己的 LLM Key / 模型配置（按用户隔离）。 */
@@ -21,6 +23,7 @@ public class UserLlmController {
 
     private final CurrentUserService currentUserService;
     private final UserLlmSettingsService llmSettingsService;
+    private final LlmUsageService llmUsageService;
 
     @GetMapping
     public Map<String, Object> get(HttpServletRequest request) {
@@ -30,6 +33,13 @@ public class UserLlmController {
         body.put("llm", llmSettingsService.publicView(user));
         body.put("user_public_id", user.getPublicId());
         return body;
+    }
+
+    @GetMapping("/usage")
+    public Map<String, Object> usage(
+            HttpServletRequest request, @RequestParam(value = "limit", defaultValue = "30") int limit) {
+        UserEntity user = currentUserService.require(request);
+        return llmUsageService.summaryFor(user, limit);
     }
 
     @PostMapping("/config")

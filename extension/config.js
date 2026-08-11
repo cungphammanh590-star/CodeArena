@@ -1,10 +1,12 @@
 /**
  * 扩展共享配置。服务经 Gateway；鉴权为 JWT（Bearer）。
+ * 地址与 Vite/Gateway 约定一致，均用 127.0.0.1（避免 macOS 上 localhost→::1 连不上）。
  */
 "use strict";
 
-const API_BASE = "http://127.0.0.1:8080";
-const WEB_BASE = "http://127.0.0.1:5173";
+// 产品内置入口（发版时改这里；用户界面不可改）
+const API_BASE = "http://127.0.0.1:8080"; // Gateway
+const WEB_BASE = "http://127.0.0.1:5173"; // Vue 仪表盘 / 陪练
 
 const DEFAULT_API_BASE = API_BASE;
 const DEFAULT_WEB_BASE = WEB_BASE;
@@ -62,12 +64,15 @@ async function saveConfig(partial) {
   if (partial.userPublicId != null) payload[STORAGE_KEYS.userPublicId] = partial.userPublicId;
   if (partial.userDisplay != null) payload[STORAGE_KEYS.userDisplay] = partial.userDisplay;
   await chrome.storage.local.set(payload);
-  try {
-    chrome.runtime.sendMessage({ type: "auth_changed" }, () => {
-      void chrome.runtime.lastError;
-    });
-  } catch (_e) {
-    /* ignore */
+  // 仅 token 变化时通知（避免 ensureAuth 刷 display 触发死循环补传）
+  if (partial.accessToken != null) {
+    try {
+      chrome.runtime.sendMessage({ type: "auth_changed" }, () => {
+        void chrome.runtime.lastError;
+      });
+    } catch (_e) {
+      /* ignore */
+    }
   }
 }
 
@@ -131,31 +136,50 @@ async function authHeaders(extra = {}) {
 }
 
 async function apiFetch(path, options = {}) {
-  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const pathPart = path.startsWith("/") ? path : `/${path}`;
+  // 127.0.0.1 与 localhost 在部分 Chrome/网络环境下表现不同，失败时回退
+  const bases = [API_BASE];
+  if (API_BASE.includes("127.0.0.1")) {
+    bases.push(API_BASE.replace("127.0.0.1", "localhost"));
+  } else if (API_BASE.includes("localhost")) {
+    bases.push(API_BASE.replace("localhost", "127.0.0.1"));
+  }
+
   const headers = await authHeaders(options.headers || {});
-  let res;
-  try {
-    res = await fetch(url, { ...options, headers });
-  } catch (e) {
-    const err = new Error(friendlyError(e));
-    err.status = 0;
-    throw err;
+  let lastErr = null;
+
+  for (const base of bases) {
+    const url = `${base}${pathPart}`;
+    let res;
+    try {
+      res = await fetch(url, { ...options, headers });
+    } catch (e) {
+      lastErr = e;
+      console.warn("[codearena] fetch network error", url, String(e));
+      continue;
+    }
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { message: text };
+    }
+    if (!res.ok) {
+      const err = new Error(data.message || data.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      err.url = url;
+      err.message = friendlyError(err);
+      throw err;
+    }
+    return data;
   }
-  const text = await res.text();
-  let data;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { message: text };
-  }
-  if (!res.ok) {
-    const err = new Error(data.message || data.error || `HTTP ${res.status}`);
-    err.status = res.status;
-    err.data = data;
-    err.message = friendlyError(err);
-    throw err;
-  }
-  return data;
+
+  const err = new Error(friendlyError(lastErr || new Error("Failed to fetch")));
+  err.status = 0;
+  err.message = `${err.message}（请确认 Gateway 已启动：${API_BASE}）`;
+  throw err;
 }
 
 /** 校验 JWT：优先本地解析；在线时再打 /api/auth/me。 */

@@ -177,16 +177,25 @@ async function refresh() {
     renderCoachUnavailable("请先登录账号，再同步提交与打开陪练");
   }
 
-  const stored = await chrome.storage.local.get(["lastEvent"]);
+  const stored = await chrome.storage.local.get(["lastEvent", "pendingSubmissions"]);
   const last = stored.lastEvent;
-  if (!last) {
+  const pendingCount = Array.isArray(stored.pendingSubmissions)
+    ? stored.pendingSubmissions.length
+    : 0;
+  if (!last && pendingCount === 0) {
     lastEl.textContent = "最近一次：尚无记录";
     return;
   }
-  const when = last.at ? new Date(last.at).toLocaleString() : "";
+  const when = last?.at ? new Date(last.at).toLocaleString() : "";
+  const pendingNote =
+    pendingCount > 0 ? ` · 待补传 ${pendingCount} 条（登录后自动同步）` : "";
+  if (!last) {
+    lastEl.textContent = `最近一次：尚无记录${pendingNote}`;
+    return;
+  }
   lastEl.textContent = last.ok
-    ? `最近一次成功：${last.summary || ""} ${when}`
-    : `最近一次失败：${last.error || "请稍后再试"} ${when}`;
+    ? `最近一次成功：${last.summary || ""} ${when}${pendingNote}`
+    : `最近一次失败：${last.error || "请稍后再试"} ${when}${pendingNote}`;
 }
 
 dashboardBtn.addEventListener("click", async () => {

@@ -40,15 +40,13 @@ function barHeight(
   align-items: flex-end;
   height: 96px;
   margin-bottom: 4px;
-  padding: 4px 2px 22px;
+  padding: 8px 4px 22px;
   border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, transparent 70%),
-    var(--soft);
+  background: var(--soft);
 }
 .bar {
   flex: 1;
-  background: #e2c4c0;
+  background: #b7c4d4;
   border-radius: 7px 7px 3px 3px;
   min-height: 4px;
   position: relative;
@@ -58,7 +56,7 @@ function barHeight(
     transform 0.15s ease;
 }
 .bar:hover {
-  background: #d4a8a4;
+  background: #8fa0b5;
   transform: translateY(-1px);
 }
 .bar.active {

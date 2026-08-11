@@ -33,7 +33,7 @@ esac
 
 echo "Done. Health tips:"
 echo "  postgres  localhost:5432"
-echo "  redis     localhost:6379"
+echo "  redis     localhost:6380 (redis-stack / RedisJSON)"
 echo "  nacos     http://localhost:8848/nacos"
 if [[ "$MODE" != "infra" ]]; then
   echo "  nginx     http://localhost/"

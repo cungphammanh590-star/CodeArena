@@ -2,6 +2,8 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import api from "@/api/client";
 import { chinaTodayStr } from "@/utils/format";
+import { toUserMessage } from "@/utils/userMessage";
+import { formatClockMinute } from "@/utils/format";
 
 export interface DayBar {
   date: string;
@@ -15,6 +17,7 @@ export interface DayItem {
   status: string;
   runtime_ms?: number | null;
   submitted_at?: string;
+  submission_id?: string;
 }
 
 export interface WrongItem {
@@ -46,6 +49,7 @@ export interface AggregatedDayProblem {
 export const useStatsStore = defineStore("stats", () => {
   const selectedDate = ref(chinaTodayStr());
   const statusText = ref("加载中…");
+  const currentUsername = ref("");
   const todaySubmissions = ref<number | string>("—");
   const todayAccepted = ref<string>("—");
   const streakDays = ref<string>("—");
@@ -111,12 +115,15 @@ export const useStatsStore = defineStore("stats", () => {
         params: { date: selectedDate.value },
       });
       if (data.date) selectedDate.value = data.date;
+      if (data.username) currentUsername.value = String(data.username);
+      else if (data.user_public_id)
+        currentUsername.value = String(data.user_public_id);
 
       todaySubmissions.value = data.today_submissions;
       todayAccepted.value = `${data.today_accepted} (${data.today_acceptance_rate}%)`;
       streakDays.value = `${data.streak_days} 天`;
       acceptanceRate.value = `${data.accepted_count}/${data.total_submissions} (${data.acceptance_rate}%)`;
-      statusText.value = `已更新 ${new Date().toLocaleTimeString()}`;
+      statusText.value = `已更新 ${formatClockMinute()}`;
       last7.value = data.last7 || [];
       todayItems.value = data.today_items || [];
       todayWrong.value = data.today_wrong || [];
@@ -126,7 +133,7 @@ export const useStatsStore = defineStore("stats", () => {
         await loadProblems();
       }
     } catch (err) {
-      statusText.value = `无法读取统计：${err}`;
+      statusText.value = toUserMessage(err, "统计暂时加载不了，请稍后再试");
     }
   }
 
@@ -138,6 +145,7 @@ export const useStatsStore = defineStore("stats", () => {
   return {
     selectedDate,
     statusText,
+    currentUsername,
     todaySubmissions,
     todayAccepted,
     streakDays,

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CodeArena Tracker",
-  "version": "0.5.0",
+  "version": "0.5.3",
   "description": "登录 CodeArena 后，将 leetcode.cn 提交同步到你的账号并打开陪练。",
   "permissions": ["storage", "alarms", "notifications", "tabs", "activeTab"],
   "host_permissions": [

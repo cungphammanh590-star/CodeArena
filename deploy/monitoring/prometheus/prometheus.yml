@@ -7,15 +7,16 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
+  # Compose 网络内服务名
   - job_name: gateway
-    metrics_path: /metrics
+    metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["gateway:8080"]
         labels:
           service: gateway
 
   - job_name: business-service
-    metrics_path: /metrics
+    metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["business-service:8090"]
         labels:
@@ -27,3 +28,28 @@ scrape_configs:
       - targets: ["llm-service:8091"]
         labels:
           service: llm-service
+
+  # 本机 make 启动时（Docker Desktop / Linux 加 --add-host）
+  - job_name: gateway-host
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels:
+          service: gateway
+          source: host
+
+  - job_name: business-host
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8090"]
+        labels:
+          service: business-service
+          source: host
+
+  - job_name: llm-host
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8091"]
+        labels:
+          service: llm-service
+          source: host

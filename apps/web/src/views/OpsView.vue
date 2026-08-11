@@ -3,6 +3,9 @@ import { computed, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import AppHeader from "@/components/AppHeader.vue";
 import { useOpsStore } from "@/stores/ops";
+import api from "@/api/client";
+import { formatDisplayTime } from "@/utils/format";
+import { toUserMessage } from "@/utils/userMessage";
 
 const ops = useOpsStore();
 const {
@@ -48,6 +51,23 @@ const {
 } = storeToRefs(ops);
 
 const busy = ref<Record<string, boolean>>({});
+
+const usageSummary = ref<{
+  last_24h?: { total_tokens?: number; calls?: number };
+  last_7d?: { total_tokens?: number; calls?: number };
+  recent?: Array<Record<string, unknown>>;
+} | null>(null);
+const usageMsg = ref("");
+
+async function loadUsage() {
+  usageMsg.value = "";
+  try {
+    const { data } = await api.get("/users/me/llm/usage", { params: { limit: 20 } });
+    usageSummary.value = data;
+  } catch (e) {
+    usageMsg.value = toUserMessage(e, "用量暂时加载不了");
+  }
+}
 
 const configRows = computed(() => {
   const cfg = config.value;
@@ -103,6 +123,7 @@ function onSampleBackdrop(e: MouseEvent) {
 onMounted(() => {
   ops.loadConfig();
   ops.loadLearning();
+  loadUsage();
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && sampleOpen.value) closeSample();
   });
@@ -112,12 +133,6 @@ onMounted(() => {
 <template>
   <AppHeader title="维护台" ops>
     <template #subtitle>配置、图谱与陪练模型 · 危险操作需确认</template>
-    <template #after-title>
-      <div class="nav">
-        <RouterLink to="/">仪表盘</RouterLink>
-        <RouterLink to="/ops">维护台</RouterLink>
-      </div>
-    </template>
   </AppHeader>
 
   <main class="page-main ops">
@@ -380,6 +395,58 @@ onMounted(() => {
         </button>
       </div>
       <div class="msg" :class="llmMsgKind">{{ llmMsg }}</div>
+    </section>
+
+    <!-- 我的模型用量 -->
+    <section class="section-card ops-section">
+      <div class="section-head">
+        <h2>我的模型用量</h2>
+        <button type="button" class="ghost-link" @click="loadUsage">刷新</button>
+      </div>
+      <p class="hint">
+        记录本账号调用云端/本地模型的次数与 token（不展示 Key）。陪练一轮后会出现在这里。
+      </p>
+      <div v-if="usageSummary" class="usage-metrics">
+        <div class="usage-card">
+          <div class="label">近 24 小时</div>
+          <div class="value">{{ usageSummary.last_24h?.total_tokens ?? 0 }} tokens</div>
+          <div class="meta">{{ usageSummary.last_24h?.calls ?? 0 }} 次调用</div>
+        </div>
+        <div class="usage-card">
+          <div class="label">近 7 天</div>
+          <div class="value">{{ usageSummary.last_7d?.total_tokens ?? 0 }} tokens</div>
+          <div class="meta">{{ usageSummary.last_7d?.calls ?? 0 }} 次调用</div>
+        </div>
+      </div>
+      <table v-if="usageSummary?.recent?.length" class="data-table">
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>模型</th>
+            <th>Tokens</th>
+            <th>结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in usageSummary.recent" :key="String(row.id)">
+            <td class="time-cell">{{ formatDisplayTime(String(row.created_at || "")) }}</td>
+            <td>{{ row.model || "—" }}</td>
+            <td>
+              {{ row.total_tokens || 0 }}
+              <span class="muted">
+                （{{ row.prompt_tokens || 0 }}+{{ row.completion_tokens || 0 }}）
+              </span>
+            </td>
+            <td>
+              <span :class="row.success ? 'ok' : 'bad'">
+                {{ row.success ? "成功" : row.error_code || "失败" }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else-if="!usageMsg" class="empty">还没有用量记录。去陪练对话一轮后再看。</p>
+      <p v-if="usageMsg" class="msg err">{{ usageMsg }}</p>
     </section>
 
     <!-- 清理日志 -->
@@ -870,5 +937,36 @@ onMounted(() => {
 .modal-actions {
   display: flex;
   gap: 8px;
+}
+.usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.usage-card {
+  background: color-mix(in srgb, var(--card) 70%, #fff);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.usage-card .label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.usage-card .value {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.usage-card .meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.muted {
+  color: var(--muted);
+  font-size: 12px;
 }
 </style>
