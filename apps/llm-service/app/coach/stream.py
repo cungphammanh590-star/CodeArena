@@ -1,4 +1,4 @@
-"""智能教练 SSE：LangGraph 阶段图驱动。"""
+"""Nex 陪练 SSE：LangGraph 阶段图驱动。"""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def chat_stream(
     if provider == "api" and not llm.get("api_key"):
         yield {
             "type": "error",
-            "message": "智能教练需要云端 API Key。请到维护台为当前用户配置后重试。",
+            "message": "Nex 需要云端 API Key。请到维护台为当前用户配置后重试。",
         }
         return
     if provider not in {"api", "ollama"}:

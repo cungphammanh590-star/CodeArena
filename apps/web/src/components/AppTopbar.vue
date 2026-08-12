@@ -11,12 +11,12 @@ const showPrefs = computed(() => route.name === "dashboard");
 <template>
   <header class="app-topbar">
     <RouterLink class="app-brand" to="/">
-      LeetMate
-      <span>陪练</span>
+      CodeArena
+      <span>Nex</span>
     </RouterLink>
     <nav class="app-nav" aria-label="主导航">
       <RouterLink to="/">仪表盘</RouterLink>
-      <RouterLink to="/coach">陪练</RouterLink>
+      <RouterLink to="/coach">Nex</RouterLink>
       <RouterLink to="/ops">维护</RouterLink>
     </nav>
     <div class="app-topbar-actions">

@@ -153,7 +153,7 @@ export const useOpsStore = defineStore("ops", () => {
       if (data.status !== "ok") throw new Error(data.message || "failed");
       llmApiKey.value = "";
       applyLlmForm(data.config || {});
-      setMsg("llm", "已保存陪练模型配置", "ok");
+      setMsg("llm", "已保存 Nex 模型配置", "ok");
       await loadConfig();
     } catch (err) {
       setMsg("llm", String(err), "err");
@@ -204,7 +204,7 @@ export const useOpsStore = defineStore("ops", () => {
   }
 
   async function cleanLogs() {
-    if (!confirm("确认清理服务日志与陪练调试日志？")) return;
+    if (!confirm("确认清理服务日志与 Nex 调试日志？")) return;
     setMsg("logs", "清理中…");
     try {
       const { data } = await api.post("/ops/logs/clean", {
@@ -214,7 +214,7 @@ export const useOpsStore = defineStore("ops", () => {
       if (data.status !== "ok") throw new Error(data.message || "failed");
       setMsg(
         "logs",
-        `已删除 ${data.count} 个文件（服务 ${(data.service_logs || []).length} · 陪练调试 ${(data.coach_debug_logs || []).length}）`,
+        `已删除 ${data.count} 个文件（服务 ${(data.service_logs || []).length} · Nex 调试 ${(data.coach_debug_logs || []).length}）`,
         "ok",
       );
     } catch (err) {

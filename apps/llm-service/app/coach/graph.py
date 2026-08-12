@@ -1,4 +1,4 @@
-"""智能教练 LangGraph：hydrate → classify → [plan_resolve] → refuse|offer|confirm|agent⇄tools → finalize → persist → END"""
+"""Nex 陪练 LangGraph：hydrate → classify → [plan_resolve] → refuse|offer|confirm|agent⇄tools → finalize → persist → END"""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class GenerationCancelled(Exception):
     """客户端断开或取消。"""
 
 
-_SYSTEM = """你是「智能教练」：苏格拉底式刷题陪练，用中文简短回应。
+_SYSTEM = """你是「Nex」：CodeArena 的苏格拉底式刷题陪练，用中文简短回应。
 
 规则：
 1. 先弄清用户处在：闲聊/看进度/选题/题内跟练/专题复盘/刷题计划。可用工具查画像、未通过题、掌握度、选题候选、长期记忆、当前代码与计划。

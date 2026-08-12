@@ -1,21 +1,21 @@
 ---
-name: leetmate-web-ux
+name: codearena-web-ux
 description: >-
-  Improve LeetMate/CodeArena Vue web UX for coach, dashboard, problem, login,
+  Improve CodeArena Vue web UX for Nex coach, dashboard, problem, login,
   and ops. Use when editing apps/web, redesigning UI, polishing Chinese copy,
   or when the user asks to make the frontend clearer, prettier, or more usable.
 paths: apps/web/**
 ---
 
-# LeetMate Web UX
+# CodeArena Web UX
 
-**刷题 + AI 陪练**。栈：Vue 3 + Vite + Pinia + Router（`apps/web/`）。
+**刷题 + Nex（AI 陪练）**。栈：Vue 3 + Vite + Pinia + Router（`apps/web/`）。
 
 ## 页面优先级
 
-1. Coach `/coach` — 对话清晰 > 装饰
+1. Nex `/coach` — 对话清晰 > 装饰
 2. Problem `/problems/:id` — 状态/最近提交可扫读
-3. Dashboard `/` — 一眼进度 + **一个**进陪练 CTA
+3. Dashboard `/` — 一眼进度 + **一个**进 Nex CTA
 4. Login — 短、稳
 5. Ops — 可密，但同 token
 
@@ -25,7 +25,7 @@ paths: apps/web/**
 |------|------|
 | Token | `src/assets/theme.css` |
 | 导航 | `AppHeader.vue`, `AuthBar.vue` |
-| 陪练 | `views/CoachView.vue`, `stores/coach.ts` |
+| Nex | `views/CoachView.vue`, `stores/coach.ts` |
 | 用户可见错误 | `utils/userMessage.ts` |
 
 小改动沿用现有 CSS 变量与 class；大改可动 token。
@@ -39,23 +39,24 @@ paths: apps/web/**
 - **少装饰**：少边框、少阴影叠层、不用 emoji 当图标、不用紫色渐变/glow/胶囊统计条
 - **当前主题**偏 cream + blush + soft purple；大改时收成「中性底 + 一个强调色」，小修先别换皮
 
-## Coach（最高杠杆）
+## Nex（最高杠杆）
 
 - 开场口语化，禁「会话已就绪 / 模式：xxx」
-- 用户 / 陪练气泡区分清楚；Markdown 可读；流式少抖布局
+- 用户 / Nex 气泡区分清楚；Markdown 可读；流式少抖布局
 - Composer：主按钮明确；Enter 发送；禁用要说人话
 - 确认 / ask-user：选项用按钮，别埋文案里
 - 错误只走 `userMessage`；busy 反馈贴近输入区
 
 ## Dashboard / Problem
 
-- 首屏最多约 3 个指标 + 一个 CTA（去陪练 / 继续某题）
+- 首屏最多约 3 个指标 + 一个 CTA（打开 Nex / 继续某题）
 - 题页：题名、状态、最近提交在前；深统计靠后
 
 ## 文案（zh-CN）
 
 - 短句；按钮「动词 + 对象」（发送 / 结束本轮 / 提交回答）
-- 陪练语气（你/我），不要系统公告腔
+- Nex 语气（你/我），不要系统公告腔
+- 产品名：平台 **CodeArena**，陪练 **Nex**
 - 空状态：一句话说下一步
 
 ## 组件习惯（够用即可）
@@ -70,7 +71,7 @@ paths: apps/web/**
 1. 先定本屏用户任务，再删不服务任务的 chrome  
 2. 动布局/样式前读现有 `theme.css` 与同页 scoped 样式  
 3. 共享 token 进 `theme.css`；一次性布局留在页面内  
-4. 用 ~375 与桌面各看一眼，Coach 两端都要能用  
+4. 用 ~375 与桌面各看一眼，Nex 两端都要能用  
 
 ## 不做
 

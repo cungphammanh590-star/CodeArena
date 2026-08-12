@@ -1,6 +1,6 @@
 # 短路线
 
-**主轴已通**：扩展提交 → 统计/题单 → LangGraph 陪练（含 P0 sandbox）→ **题级 SRS**。
+**主轴已通**：扩展提交 → 统计/题单 → LangGraph Nex（含 P0 sandbox）→ **题级 SRS**。
 
 ## 已收敛（勿回潮）
 

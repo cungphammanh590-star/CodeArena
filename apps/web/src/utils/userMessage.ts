@@ -89,7 +89,7 @@ function mapTechnical(raw: string): string | null {
       raw,
     )
   ) {
-    if (/llm|模型|api.?key|陪练|教练/i.test(raw)) {
+    if (/llm|模型|api.?key|陪练|教练|nex/i.test(raw)) {
       return "暂时读不到你的模型配置，请稍后再试；若刚改过设置，可到维护台确认后重试";
     }
     return "服务暂时不可用，请稍后再试";

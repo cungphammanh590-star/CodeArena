@@ -132,7 +132,7 @@ onMounted(() => {
 
 <template>
   <AppHeader title="维护台" ops>
-    <template #subtitle>配置、图谱与陪练模型 · 危险操作需确认</template>
+    <template #subtitle>配置、图谱与 Nex 模型 · 危险操作需确认</template>
   </AppHeader>
 
   <main class="page-main ops">
@@ -318,9 +318,9 @@ onMounted(() => {
       <div class="msg" :class="configMsgKind">{{ configMsg }}</div>
     </section>
 
-    <!-- 陪练模型 -->
+    <!-- Nex 模型 -->
     <section class="section-card ops-section">
-      <h2>陪练模型</h2>
+      <h2>Nex 模型</h2>
       <p class="hint">
         可选 Ollama 或 DeepSeek。API Key <strong>按用户</strong>保存在 business-service；对话时 llm-service 只用当前用户的 Key。
       </p>
@@ -404,7 +404,7 @@ onMounted(() => {
         <button type="button" class="ghost-link" @click="loadUsage">刷新</button>
       </div>
       <p class="hint">
-        记录本账号调用云端/本地模型的次数与 token（不展示 Key）。陪练一轮后会出现在这里。
+        记录本账号调用云端/本地模型的次数与 token（不展示 Key）。和 Nex 对话一轮后会出现在这里。
       </p>
       <div v-if="usageSummary" class="usage-metrics">
         <div class="usage-card">
@@ -445,7 +445,7 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
-      <p v-else-if="!usageMsg" class="empty">还没有用量记录。去陪练对话一轮后再看。</p>
+      <p v-else-if="!usageMsg" class="empty">还没有用量记录。去和 Nex 对话一轮后再看。</p>
       <p v-if="usageMsg" class="msg err">{{ usageMsg }}</p>
     </section>
 
@@ -453,7 +453,7 @@ onMounted(() => {
     <section class="section-card ops-section">
       <h2>清理日志</h2>
       <p class="hint">
-        清空 LaunchAgent 服务日志，并默认清理陪练调试日志（log/coach）。
+        清空 LaunchAgent 服务日志，并默认清理 Nex 调试日志（log/coach）。
       </p>
       <div class="row">
         <button
@@ -462,7 +462,7 @@ onMounted(() => {
           :disabled="busy.logs"
           @click="withBusy('logs', () => ops.cleanLogs())"
         >
-          清理服务 + 陪练调试日志
+          清理服务 + Nex 调试日志
         </button>
       </div>
       <div class="msg" :class="logsMsgKind">{{ logsMsg }}</div>

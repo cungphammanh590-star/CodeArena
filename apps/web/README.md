@@ -1,6 +1,6 @@
 # CodeArena Web
 
-Vue 3 + Vite + TypeScript frontend for CodeArena (migrated from LeetMate).
+Vue 3 + Vite + TypeScript frontend for CodeArena.
 
 ## Develop
 

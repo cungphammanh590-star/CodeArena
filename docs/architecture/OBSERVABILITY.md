@@ -34,7 +34,7 @@ make obs-up
 # Grafana   http://localhost:3000   admin/admin
 # Loki      http://localhost:3100
 # SW UI     http://localhost:8088
-# Langfuse  http://localhost:3030   admin@leetmate.local / admin123
+# Langfuse  http://localhost:3030   admin@codearena.local / admin123
 # 若 Traces 为空：先确认 llm 日志有 “Langfuse tracing enabled”；再
 # `docker compose -f docker-compose.langfuse.yml restart langfuse-worker`
 # （worker Redis 卡住时会只入库不展示）。本机勿让 HTTP_PROXY 劫持 127.0.0.1。

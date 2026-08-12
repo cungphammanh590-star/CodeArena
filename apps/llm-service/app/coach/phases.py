@@ -1,4 +1,4 @@
-"""智能教练阶段与意图常量。"""
+"""Nex 陪练阶段与意图常量。"""
 
 from __future__ import annotations
 

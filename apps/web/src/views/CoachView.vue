@@ -116,7 +116,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <AppHeader title="陪练" subtitle="卡住就说，我们一起拆" narrow />
+  <AppHeader title="Nex" subtitle="卡住就说，我们一起拆" narrow />
 
   <main class="page-main narrow coach-layout">
     <div v-if="bannerVisible" class="banner" role="status">{{ banner }}</div>

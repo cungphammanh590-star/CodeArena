@@ -1,4 +1,4 @@
--- CodeArena / LeetMate business schema (PostgreSQL) — full baseline.
+-- CodeArena business schema (PostgreSQL) — full baseline.
 -- Replaces legacy incremental V1–V8. Wipe DB / flyway_schema_history before first apply.
 
 -- =============================================================================

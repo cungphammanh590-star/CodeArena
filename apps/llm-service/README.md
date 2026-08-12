@@ -27,7 +27,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8091 --reload
 |--------|------|------|
 | GET | `/health` | 进程健康 |
 | GET | `/metrics` | Prometheus |
-| POST | `/api/coach/stream` | 陪练 SSE（经 Gateway） |
+| POST | `/api/coach/stream` | Nex SSE（经 Gateway） |
 
 环境变量：`BUSINESS_INTERNAL_URL`、`INTERNAL_TOOL_TOKEN`、`REDIS_URL`、`CHECKPOINT_BACKEND`。  
 图与记忆：`docs/architecture/COACH_LANGGRAPH.md`。

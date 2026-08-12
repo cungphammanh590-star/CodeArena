@@ -67,7 +67,7 @@ class SandboxService:
         return self._backend is not None
 
     def run_dir(self, *, user_id: str, session_id: str, run_id: str) -> Path:
-        root = Path(self._settings.data_dir or "/tmp/leetmate-code-runs")
+        root = Path(self._settings.data_dir or "/tmp/codearena-code-runs")
         path = root / _safe_segment(user_id) / _safe_segment(session_id) / _safe_segment(run_id)
         path.mkdir(parents=True, exist_ok=True)
         return path

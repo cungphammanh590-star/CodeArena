@@ -52,7 +52,7 @@ async function submit() {
 <template>
   <main class="login-page">
     <section class="panel">
-      <p class="brand">LeetMate</p>
+      <p class="brand">CodeArena</p>
       <h1>{{ mode === "login" ? "登录" : "注册" }}</h1>
       <p class="hint">同步力扣提交，并与浏览器扩展共用同一账号。</p>
 

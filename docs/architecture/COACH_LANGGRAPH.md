@@ -1,4 +1,4 @@
-# 陪练 LangGraph 架构特性（当前定义）
+# Nex（陪练）LangGraph 架构特性（当前定义）
 
 本文描述 **CodeArena `llm-service` 当前已实现** 的图、State、Checkpoint 与流转，而非规划草案。  
 详见：[COACH_TOOLS.md](./COACH_TOOLS.md)、[BUSINESS_FLOW.md](./BUSINESS_FLOW.md)。记忆分层见本文 §7。

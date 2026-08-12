@@ -1,6 +1,6 @@
 # Langfuse self-host (observability). Ports chosen to avoid Grafana:3000 / Prometheus:9090 / app Redis:6380.
 #   docker compose -f docker-compose.langfuse.yml up -d
-# UI: http://localhost:3030  (admin@leetmate.local / admin123 by default init)
+# UI: http://localhost:3030  (admin@codearena.local / admin123 by default init)
 
 name: codearena-langfuse
 
@@ -68,11 +68,11 @@ services:
       LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9092
       LANGFUSE_INIT_ORG_ID: codearena
       LANGFUSE_INIT_ORG_NAME: CodeArena
-      LANGFUSE_INIT_PROJECT_ID: leetmate-coach
-      LANGFUSE_INIT_PROJECT_NAME: leetmate-coach
+      LANGFUSE_INIT_PROJECT_ID: codearena-nex
+      LANGFUSE_INIT_PROJECT_NAME: codearena-nex
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-codearena-local}
       LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-codearena-local-secret}
-      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@leetmate.local}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@codearena.local}
       LANGFUSE_INIT_USER_NAME: admin
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-admin123}
 

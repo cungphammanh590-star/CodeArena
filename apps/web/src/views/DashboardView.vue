@@ -130,10 +130,10 @@ onMounted(() => {
   <main class="page-main">
     <section class="hero-cta">
       <div>
-        <h2>开始陪练</h2>
+        <h2>找 Nex 开练</h2>
         <p>卡住时直接聊，或从最近提交进单题复盘。</p>
       </div>
-      <RouterLink class="btn-primary" to="/coach">去陪练</RouterLink>
+      <RouterLink class="btn-primary" to="/coach">打开 Nex</RouterLink>
     </section>
 
     <DayNavigator
@@ -192,7 +192,7 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
-      <p v-else class="empty">今天没有计划任务。去做一题或去陪练生成计划。</p>
+      <p v-else class="empty">今天没有计划任务。去做一题或找 Nex 生成计划。</p>
     </section>
 
     <section class="section-card">
@@ -402,7 +402,7 @@ onMounted(() => {
                 class="link-title"
                 :to="`/coach?submission=${encodeURIComponent(String(i.submission_id || ''))}&problem_id=${i.problem_id}`"
               >
-                陪练
+                Nex
               </RouterLink>
             </td>
           </tr>

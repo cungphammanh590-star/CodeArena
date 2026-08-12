@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     sandbox_max_output_chars: int = 8000
     sandbox_max_concurrent_per_user: int = 1
     sandbox_max_runs_per_minute: int = 10
-    sandbox_data_dir: str = "/tmp/leetmate-code-runs"
+    sandbox_data_dir: str = "/tmp/codearena-code-runs"
 
     # Observability
     observability_skywalking: bool = False

@@ -4,6 +4,6 @@
 
 | Skill | 用途 |
 |-------|------|
-| `leetmate-web-ux` | `apps/web` 的 UI / 文案 / 信息架构 |
+| `codearena-web-ux` | `apps/web` 的 UI / 文案 / 信息架构（产品 CodeArena，陪练 Nex） |
 
 改前端或说「改好看」时用这个即可。

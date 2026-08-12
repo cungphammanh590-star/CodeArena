@@ -24,11 +24,11 @@ flowchart LR
 | 题目 / 统计 / 掌握 | `/api/problems/**`、`/api/stats/**`、`/api/mastered` | Java |
 | 学习 / 题单 / 复习 | `/api/learning/**`、`/api/lists/**`、`/api/review/**` | Java |
 | 运维 | `/api/ops/**` | Java |
-| 陪练编排 | `/api/coach/prepare|session|sessions|hint` | Java |
-| 陪练对话 SSE | `/api/coach/stream` | Python |
+| Nex 编排 | `/api/coach/prepare|session|sessions|hint` | Java |
+| Nex 对话 SSE | `/api/coach/stream` | Python |
 | 内网工具 / 用量 | `/internal/tools/**`、`/internal/llm/**`、`/internal/users/**` | Java（不进公网） |
 
-## 陪练时序
+## Nex 时序
 
 ```text
 1. POST /api/coach/prepare     → Java 建/取 session（可 force_new；返回 turns 供 UI 回放）

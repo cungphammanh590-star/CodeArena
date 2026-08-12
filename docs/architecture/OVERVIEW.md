@@ -1,6 +1,6 @@
 # CodeArena 架构文档
 
-浏览器扩展 / Web → Nginx → Gateway → **business-service**（业务写库）+ **llm-service**（仅陪练 SSE）。  
+浏览器扩展 / Web → Nginx → Gateway → **business-service**（业务写库）+ **llm-service**（仅 Nex SSE）。  
 数据：Postgres + Redis（Checkpoint / 可选 stats 缓存）。可观测性为 opt-in。
 
 ```mermaid
@@ -22,7 +22,7 @@ flowchart LR
 | 文档 | 用途 |
 |------|------|
 | [BUSINESS_FLOW.md](./BUSINESS_FLOW.md) | 服务边界与 API 归属 |
-| [COACH_LANGGRAPH.md](./COACH_LANGGRAPH.md) | 陪练图、State、Checkpoint、记忆分层 |
+| [COACH_LANGGRAPH.md](./COACH_LANGGRAPH.md) | Nex 图、State、Checkpoint、记忆分层 |
 | [COACH_TOOLS.md](./COACH_TOOLS.md) | 工具清单与内网协议 |
 | [DATA_CACHE.md](./DATA_CACHE.md) | 表、索引、Redis 投影 |
 | [USER_DOMAIN.md](./USER_DOMAIN.md) | 鉴权与当前用户解析 |

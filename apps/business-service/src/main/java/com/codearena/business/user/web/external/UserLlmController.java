@@ -52,7 +52,7 @@ public class UserLlmController {
         resp.put("status", "ok");
         resp.put("config", cfg);
         resp.put("user_public_id", user.getPublicId());
-        resp.put("message", "已保存当前用户的陪练模型配置");
+        resp.put("message", "已保存当前用户的 Nex 模型配置");
         return resp;
     }
 

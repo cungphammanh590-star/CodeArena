@@ -7,7 +7,7 @@
 | 用户 | `users`、`user_profiles`、`user_identities`、`user_credentials`、`auth_sessions`、`user_llm_settings` |
 | 刷题 | `problems`、`submissions` |
 | 学习 | `problem_lists`、`problem_list_items`、`learning_prefs`、`user_problem_flags`、`study_plans`、`plan_daily_tasks`、`goal_problem_banks`、`user_problem_srs` |
-| 陪练 | `coach_sessions`、`coach_turns`、`user_coach_memories` |
+| Nex | `coach_sessions`、`coach_turns`、`user_coach_memories` |
 | 用量 | `llm_usage_events` |
 
 V5 已删除无用占位：`team_*`、`pay_orders`、`plan_notifications`、`knowledge_points`、`user_kp_mastery`、`coach_code_runs`、空聚合表 `problem_stats` / `problem_daily_stats`。

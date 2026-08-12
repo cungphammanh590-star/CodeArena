@@ -82,7 +82,7 @@ const ACTION_LABELS: Record<string, string> = {
   optimize: "优化分析",
 };
 
-const SESSION_STORAGE_KEY = "leetmate.coach.last_session_id";
+const SESSION_STORAGE_KEY = "codearena.coach.last_session_id";
 
 function rememberSessionId(id: string) {
   const sid = id.trim();
@@ -309,7 +309,7 @@ export const useCoachStore = defineStore("coach", () => {
   ) {
     if (preparePromise) return preparePromise;
     preparePromise = (async () => {
-      showBanner(opts?.forceNew ? "正在开启新会话…" : "正在准备陪练…");
+      showBanner(opts?.forceNew ? "正在开启新会话…" : "正在准备 Nex…");
       const body: Record<string, unknown> = {
         submission_id: submissionId || "",
         problem_id: pid ? Number(pid) : null,
@@ -323,7 +323,7 @@ export const useCoachStore = defineStore("coach", () => {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(toUserMessage(data.message, "暂时无法开始陪练，请稍后再试"));
+        throw new Error(toUserMessage(data.message, "暂时无法开始 Nex，请稍后再试"));
       }
       return data as Record<string, unknown>;
     })();
@@ -362,7 +362,7 @@ export const useCoachStore = defineStore("coach", () => {
     applySessionPayload(data as Record<string, unknown>);
     if (data.fallback_used) {
       showBanner(
-        `指定提交未找到，已使用本题最近提交 ${data.resolved_submission_id} 启动陪练。`,
+        `指定提交未找到，已使用本题最近提交 ${data.resolved_submission_id} 启动 Nex。`,
       );
     }
     await loadSessions();
@@ -374,7 +374,7 @@ export const useCoachStore = defineStore("coach", () => {
       fallbackOpening:
         openingHint ||
         String(data.opening || "") ||
-        `已就题目 ${pid} 开启陪练，可以直接提问。`,
+        `已就题目 ${pid} 开启 Nex，可以直接提问。`,
     });
     await loadSessions();
   }
@@ -618,7 +618,7 @@ export const useCoachStore = defineStore("coach", () => {
           if (data.done) {
             disableComposer();
             sessionId.value = "";
-            showBanner("本轮已结束。重新打开陪练可开始新会话。");
+            showBanner("本轮已结束。重新打开 Nex 可开始新会话。");
           } else if (data.cancelled) {
             showBanner("已停止生成");
           }
@@ -702,7 +702,7 @@ export const useCoachStore = defineStore("coach", () => {
     try {
       const health = await fetchHealth();
       if (!health.coach_available) {
-        showBanner("陪练暂时不可用，请稍后再试");
+        showBanner("Nex 暂时不可用，请稍后再试");
         return;
       }
       graphMode.value = health.llm_provider === "api" ? "api" : "local";
@@ -717,7 +717,7 @@ export const useCoachStore = defineStore("coach", () => {
         return;
       }
       if (!health.kg_imported) {
-        showBanner("学习资料仍在准备中，陪练可以先用");
+        showBanner("学习资料仍在准备中，Nex 可以先用");
       }
       if (params.session) {
         await openSession(params.session);

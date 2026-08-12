@@ -299,7 +299,7 @@ public class CoachSessionService {
         if (isProfileMode(session.getMode())) {
             return "我在。想听今日回顾可以说「今天怎么样」，想选题可以说「推荐一题」。";
         }
-        return "我在陪练大厅。可以说目标（比如「准备 Google 面试 30 天」），"
+        return "我是 Nex。可以说目标（比如「准备 Google 面试 30 天」），"
                 + "或直接报题号开始跟练。";
     }
 

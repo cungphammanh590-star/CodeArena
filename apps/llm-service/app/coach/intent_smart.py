@@ -1,4 +1,4 @@
-"""智能教练首轮/空闲意图：规则优先；低置信留给 confirm。"""
+"""Nex 首轮/空闲意图：规则优先；低置信留给 confirm。"""
 
 from __future__ import annotations
 

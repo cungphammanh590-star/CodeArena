@@ -202,7 +202,7 @@ onMounted(() => {
           class="btn-primary"
           :to="`/coach?problem_id=${problemId}`"
         >
-          本题陪练
+          本题找 Nex
         </RouterLink>
       </div>
     </template>

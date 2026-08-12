@@ -1,7 +1,7 @@
 # CodeArena
 
-在线刷题平台。  
-技术栈：**Vue 3** + **Spring Boot 3 / Gateway** + **FastAPI LLM 陪练**，配套 Postgres / Redis / Nacos / Nginx / 可观测性。
+在线刷题平台，AI 陪练叫 **Nex**。  
+技术栈：**Vue 3** + **Spring Boot 3 / Gateway** + **FastAPI（Nex）**，配套 Postgres / Redis / Nacos / Nginx / 可观测性。
 
 ## 仓库结构
 
@@ -79,7 +79,7 @@ docker compose --profile observability up -d   # 可观测性（较重）
 |------|------|
 | `/` | 仪表盘 |
 | `/problems/:id` | 题目详情 |
-| `/coach` | AI 陪练（SSE） |
+| `/coach` | Nex（AI 陪练 SSE） |
 | `/ops` | 维护台 |
 
 浏览器扩展见 [`docs/EXTENSION.md`](docs/EXTENSION.md)（`extension/`，经 Gateway，支持设备/账号登录）。

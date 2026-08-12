@@ -78,7 +78,7 @@ def fetch_user_llm_settings(
 def build_chat_model(llm: dict[str, Any]):
     provider = str(llm.get("provider") or "ollama").strip().lower()
     if provider == "mock":
-        raise RuntimeError("当前是演示模式，无法驱动智能教练。请到维护台选择本地模型或云端 API。")
+        raise RuntimeError("当前是演示模式，无法驱动 Nex。请到维护台选择本地模型或云端 API。")
     if provider == "ollama":
         return _build_ollama(llm)
     if provider == "api":
@@ -91,7 +91,7 @@ def _build_ollama(llm: dict[str, Any]):
         from langchain_ollama import ChatOllama
     except ImportError as exc:
         raise RuntimeError(
-            "本地模型组件未安装完成，暂时无法使用陪练。请联系管理员或稍后再试。"
+            "本地模型组件未安装完成，暂时无法使用 Nex。请联系管理员或稍后再试。"
         ) from exc
     model = str(llm.get("coach_model") or "").strip() or "qwen2.5:7b-instruct-q4_K_M"
     base = str(llm.get("base_url") or "").strip() or OLLAMA_BASE_URL
@@ -115,7 +115,7 @@ def _build_api(llm: dict[str, Any]):
         from langchain_openai import ChatOpenAI
     except ImportError as exc:
         raise RuntimeError(
-            "云端模型组件未安装完成，暂时无法使用陪练。请联系管理员或稍后再试。"
+            "云端模型组件未安装完成，暂时无法使用 Nex。请联系管理员或稍后再试。"
         ) from exc
     base_url = str(llm.get("base_url") or "").strip() or DEEPSEEK_BASE_URL
     model = str(llm.get("coach_model") or "").strip() or DEEPSEEK_DEFAULT_MODEL
