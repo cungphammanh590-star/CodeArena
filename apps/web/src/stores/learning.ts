@@ -17,6 +17,7 @@ export interface ReviewDue {
   title: string;
   difficulty?: string;
   reason?: string;
+  kind?: "plan" | "review" | "both" | string;
 }
 
 export interface MasteredItem {
@@ -34,6 +35,7 @@ export const useLearningStore = defineStore("learning", () => {
     total?: number;
     mastered_count?: number;
   }>({});
+  const planToday = ref<ReviewDue[]>([]);
   const reviewDue = ref<ReviewDue[]>([]);
   const mastered = ref<MasteredItem[]>([]);
   const message = ref("");
@@ -72,11 +74,22 @@ export const useLearningStore = defineStore("learning", () => {
         kgMode.value = !!L.kg_mode;
         lists.value = learn.lists || [];
         const active = lists.value.find((x) => x.active);
-        activeListId.value = active?.id || lists.value[0]?.id || "";
-        progress.value = learn.progress || {};
+        activeListId.value =
+          L.active_list_id || active?.id || lists.value[0]?.id || "";
+        const raw = learn.progress || {};
+        progress.value = {
+          done: Number(raw.done ?? raw.list_done ?? 0),
+          total: Number(raw.total ?? raw.list_total ?? 0),
+          mastered_count: Number(
+            raw.mastered_count ?? raw.list_mastered ?? 0,
+          ),
+        };
       }
 
-      reviewDue.value = (review && review.due) || [];
+      planToday.value =
+        (review && (review.plan_items || review.plan?.items)) || [];
+      reviewDue.value =
+        (review && (review.review_items || review.due)) || [];
       mastered.value = (masteredData && masteredData.items) || [];
     } catch (err) {
       setMsg(toUserMessage(err, "加载失败，请稍后再试"), "err");
@@ -112,6 +125,7 @@ export const useLearningStore = defineStore("learning", () => {
     activeListId,
     lists,
     progress,
+    planToday,
     reviewDue,
     mastered,
     message,

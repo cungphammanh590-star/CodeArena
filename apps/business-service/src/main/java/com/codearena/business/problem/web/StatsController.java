@@ -1,14 +1,11 @@
 package com.codearena.business.problem.web;
 
-import com.codearena.business.problem.domain.ProblemDailyStatsEntity;
+import com.codearena.business.learning.mastery.domain.UserProblemFlagRepository;
 import com.codearena.business.problem.domain.ProblemEntity;
 import com.codearena.business.problem.domain.ProblemRepository;
-import com.codearena.business.problem.domain.ProblemStatsEntity;
-import com.codearena.business.problem.domain.ProblemStatsRepository;
-import com.codearena.business.problem.domain.ProblemDailyStatsRepository;
+import com.codearena.business.shared.cache.UserStatsCacheService;
 import com.codearena.business.submission.domain.SubmissionEntity;
 import com.codearena.business.submission.domain.SubmissionRepository;
-import com.codearena.business.learning.mastery.domain.UserProblemFlagRepository;
 import com.codearena.business.user.domain.UserEntity;
 import com.codearena.business.user.service.CurrentUserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,10 +36,9 @@ public class StatsController {
 
     private final SubmissionRepository submissionRepository;
     private final ProblemRepository problemRepository;
-    private final ProblemStatsRepository problemStatsRepository;
-    private final ProblemDailyStatsRepository problemDailyStatsRepository;
     private final UserProblemFlagRepository userProblemFlagRepository;
     private final CurrentUserService currentUserService;
+    private final UserStatsCacheService userStatsCacheService;
 
     @GetMapping("/api/stats")
     public ResponseEntity<?> stats(
@@ -56,6 +53,12 @@ public class StatsController {
                 return ResponseEntity.badRequest()
                         .body(Map.of("status", "error", "message", "无效日期，请使用 YYYY-MM-DD"));
             }
+        }
+
+        String dayKey = day.toString();
+        var cached = userStatsCacheService.getDashboard(user.getId(), dayKey);
+        if (cached.isPresent()) {
+            return ResponseEntity.ok(cached.get());
         }
 
         ZonedDateTime dayStart = day.atStartOfDay(CHINA);
@@ -88,16 +91,17 @@ public class StatsController {
         List<Map<String, Object>> todayWrong = buildTodayWrong(daySubs, problemCache);
         List<Map<String, Object>> last7 = buildLast7(day, weekSubs);
 
+        Map<String, Long> byDifficulty = countSolvedByDifficulty(user.getId());
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("date", day.toString());
+        body.put("date", dayKey);
         body.put("user_public_id", user.getPublicId());
         body.put("username", user.getUsername());
         body.put("total_submissions", total);
         body.put("accepted_count", accepted);
         body.put("acceptance_rate", total == 0 ? 0.0 : round(100.0 * accepted / total));
-        body.put("easy_solved", 0);
-        body.put("medium_solved", 0);
-        body.put("hard_solved", 0);
+        body.put("easy_solved", byDifficulty.getOrDefault("Easy", 0L));
+        body.put("medium_solved", byDifficulty.getOrDefault("Medium", 0L));
+        body.put("hard_solved", byDifficulty.getOrDefault("Hard", 0L));
         body.put("today_submissions", daySubs.size());
         body.put("today_accepted", todayAccepted);
         body.put(
@@ -108,18 +112,22 @@ public class StatsController {
         body.put("today_items", todayItems);
         body.put("today_wrong", todayWrong);
         body.put("last7", last7);
+        userStatsCacheService.putDashboard(user.getId(), dayKey, body);
         return ResponseEntity.ok(body);
     }
 
     @GetMapping("/api/problems")
     public Map<String, Object> problems(HttpServletRequest request) {
         UserEntity user = currentUserService.require(request);
+        var cached = userStatsCacheService.getPortrait(user.getId());
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
         List<SubmissionEntity> all =
-                submissionRepository.findTop80ByUserIdOrderBySubmittedAtDesc(user.getId());
-        // 取更多：若用户提交很多，上面 limit 不够；再拉全量按用户
-        all = submissionRepository.findByUserIdAndSubmittedAtGreaterThanEqualOrderBySubmittedAtDesc(
-                user.getId(),
-                java.time.OffsetDateTime.parse("2000-01-01T00:00:00Z"));
+                submissionRepository.findByUserIdAndSubmittedAtGreaterThanEqualOrderBySubmittedAtDesc(
+                        user.getId(),
+                        java.time.OffsetDateTime.parse("2000-01-01T00:00:00Z"));
 
         Map<Integer, Agg> agg = new LinkedHashMap<>();
         Map<Integer, ProblemEntity> problemCache = new HashMap<>();
@@ -168,7 +176,10 @@ public class StatsController {
                     a.totalAttempts == 0 ? 0.0 : (double) a.wrongCount / a.totalAttempts);
             items.add(item);
         }
-        return Map.of("problems", items);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("problems", items);
+        userStatsCacheService.putPortrait(user.getId(), body);
+        return body;
     }
 
     @GetMapping("/api/problems/{problemId}/stats")
@@ -176,57 +187,50 @@ public class StatsController {
             HttpServletRequest request, @PathVariable Integer problemId) {
         UserEntity user = currentUserService.require(request);
         ProblemEntity problem = problemRepository.findByProblemId(problemId).orElse(null);
-        if (problem == null && problemStatsRepository.findById(problemId).isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("status", "error", "message", "not found"));
-        }
 
         List<SubmissionEntity> subs =
                 submissionRepository.findTop80ByProblemIdOrderBySubmittedAtDesc(problemId).stream()
                         .filter(s -> Objects.equals(s.getUserId(), user.getId()))
                         .toList();
 
+        if (problem == null && subs.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("status", "error", "message", "not found"));
+        }
+
         long accepted = subs.stream().filter(s -> "Accepted".equals(s.getStatus())).count();
         long wrong = subs.size() - accepted;
 
+        Map<String, Long> breakdown = new LinkedHashMap<>();
+        for (SubmissionEntity s : subs) {
+            String st = s.getStatus() == null ? "Unknown" : s.getStatus();
+            breakdown.merge(st, 1L, Long::sum);
+        }
+
         Map<String, Object> problemView = new LinkedHashMap<>();
         problemView.put("problem_id", problemId);
+        problemView.put("title", problem != null ? problem.getTitle() : ("Problem " + problemId));
         problemView.put(
-                "title",
-                problem != null
-                        ? problem.getTitle()
-                        : problemStatsRepository
-                                .findById(problemId)
-                                .map(ProblemStatsEntity::getTitle)
-                                .orElse("Problem " + problemId));
-        problemView.put(
-                "title_slug",
-                problem != null
-                        ? problem.getSlug()
-                        : problemStatsRepository
-                                .findById(problemId)
-                                .map(ProblemStatsEntity::getTitleSlug)
-                                .orElse("problem-" + problemId));
-        problemView.put(
-                "difficulty",
-                problem != null
-                        ? problem.getDifficulty()
-                        : problemStatsRepository
-                                .findById(problemId)
-                                .map(ProblemStatsEntity::getDifficulty)
-                                .orElse(null));
+                "title_slug", problem != null ? problem.getSlug() : ("problem-" + problemId));
+        problemView.put("difficulty", problem != null ? problem.getDifficulty() : null);
         problemView.put("topic_tags", problem != null ? problem.getTags() : null);
         problemView.put("total_attempts", subs.size());
         problemView.put("accepted_count", accepted);
         problemView.put("wrong_count", wrong);
-        problemView.put("status_breakdown", Map.of());
+        problemView.put("status_breakdown", breakdown);
         problemView.put(
                 "acceptance_rate",
                 subs.isEmpty() ? 0.0 : round(100.0 * accepted / subs.size()));
-        problemView.put("struggle_score", wrong);
-        problemView.put("avg_attempts_to_ac", null);
         problemView.put(
-                "last_status", subs.isEmpty() ? null : subs.get(0).getStatus());
+                "struggle_score",
+                subs.isEmpty() ? 0.0 : (double) wrong / subs.size());
+        problemView.put("avg_attempts_to_ac", null);
+        problemView.put("last_status", subs.isEmpty() ? null : subs.get(0).getStatus());
+        problemView.put(
+                "last_submitted_at",
+                subs.isEmpty() || subs.get(0).getSubmittedAt() == null
+                        ? null
+                        : subs.get(0).getSubmittedAt().toString());
         problemView.put(
                 "mastered",
                 userProblemFlagRepository
@@ -234,18 +238,7 @@ public class StatsController {
                         .map(f -> Boolean.TRUE.equals(f.getMastered()))
                         .orElse(false));
 
-        List<Map<String, Object>> daily = new ArrayList<>();
-        for (ProblemDailyStatsEntity d :
-                problemDailyStatsRepository.findTop90ByProblemIdOrderByDayDesc(problemId)) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("day", d.getDay().toString());
-            item.put("attempts", d.getAttempts());
-            item.put("accepted_today", d.getAcceptedToday());
-            item.put("wrong_today", d.getWrongToday());
-            item.put("status_change", d.getStatusChange());
-            daily.add(item);
-        }
-
+        List<Map<String, Object>> daily = buildUserProblemDaily(subs);
         List<Map<String, Object>> submissions = new ArrayList<>();
         for (SubmissionEntity s : subs) {
             Map<String, Object> item = new LinkedHashMap<>();
@@ -273,16 +266,42 @@ public class StatsController {
                 .findByProblemId(problemId)
                 .map(row -> "# Problem " + problemId + "\n\n"
                         + "Title: " + nullToEmpty(row.getTitle()) + "\n"
-                        + "Difficulty: " + nullToEmpty(row.getDifficulty()) + "\n")
-                .orElseGet(() -> problemStatsRepository
-                        .findById(problemId)
-                        .map(row -> "# Problem " + problemId + "\n\n"
-                                + "Title: " + nullToEmpty(row.getTitle()) + "\n"
-                                + "Difficulty: " + nullToEmpty(row.getDifficulty()) + "\n"
-                                + "Attempts: " + row.getTotalAttempts() + "\n"
-                                + "Accepted: " + row.getAcceptedCount() + "\n")
-                        .orElse("# Problem " + problemId + "\n\n(no stats yet)\n"));
+                        + "Difficulty: " + nullToEmpty(row.getDifficulty()) + "\n"
+                        + "Tags: " + nullToEmpty(row.getTags()) + "\n")
+                .orElse("# Problem " + problemId + "\n\n(no problem metadata yet)\n");
         return Map.of("problem_id", problemId, "markdown", markdown);
+    }
+
+    private List<Map<String, Object>> buildUserProblemDaily(List<SubmissionEntity> subs) {
+        Map<LocalDate, int[]> buckets = new TreeMap<>((a, b) -> b.compareTo(a));
+        for (SubmissionEntity s : subs) {
+            if (s.getSubmittedAt() == null) {
+                continue;
+            }
+            LocalDate d = s.getSubmittedAt().atZoneSameInstant(CHINA).toLocalDate();
+            int[] b = buckets.computeIfAbsent(d, day -> new int[] {0, 0, 0});
+            b[0] += 1;
+            if ("Accepted".equals(s.getStatus())) {
+                b[1] += 1;
+            } else {
+                b[2] += 1;
+            }
+        }
+        List<Map<String, Object>> daily = new ArrayList<>();
+        int n = 0;
+        for (Map.Entry<LocalDate, int[]> e : buckets.entrySet()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("day", e.getKey().toString());
+            item.put("attempts", e.getValue()[0]);
+            item.put("accepted_today", e.getValue()[1]);
+            item.put("wrong_today", e.getValue()[2]);
+            item.put("status_change", null);
+            daily.add(item);
+            if (++n >= 90) {
+                break;
+            }
+        }
+        return daily;
     }
 
     private List<Map<String, Object>> mapSubmissionItems(
@@ -369,6 +388,23 @@ public class StatsController {
         return last7;
     }
 
+    private Map<String, Long> countSolvedByDifficulty(Long userId) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        counts.put("Easy", 0L);
+        counts.put("Medium", 0L);
+        counts.put("Hard", 0L);
+        List<Integer> acceptedIds =
+                submissionRepository.findDistinctProblemIdsByUserIdAndStatus(userId, "Accepted");
+        for (Integer problemId : acceptedIds) {
+            problemRepository
+                    .findByProblemId(problemId)
+                    .map(ProblemEntity::getDifficulty)
+                    .filter(d -> d != null && !d.isBlank())
+                    .ifPresent(diff -> counts.merge(diff, 1L, Long::sum));
+        }
+        return counts;
+    }
+
     private int computeStreak(Long userId, LocalDate today) {
         int streak = 0;
         for (int i = 0; i < 365; i++) {
@@ -381,7 +417,7 @@ public class StatsController {
                                     userId, start.toOffsetDateTime(), end.toOffsetDateTime());
             if (day.isEmpty()) {
                 if (i == 0) {
-                    continue; // 今天还没提交不打断历史 streak
+                    continue;
                 }
                 break;
             }

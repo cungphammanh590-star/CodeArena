@@ -29,6 +29,10 @@ class SmartState(TypedDict, total=False):
     refuse_short: bool
     solve_session: Optional[dict]  # {analysis, steps, replans, max_replans}
     paused_ask: Optional[dict]  # ask_user payload；非空表示挂起等待回复
+    # 待兑现下一步（如 show_today_tasks / confirm_plan）；短确认优先兑现
+    pending_followup: Optional[dict]
+    # 计划草稿：plan_resolve 解析结果（题号/未匹配/天数约束）
+    plan_draft: Optional[dict]
 
     # —— ephemeral：本回合 ——
     pending_action: str

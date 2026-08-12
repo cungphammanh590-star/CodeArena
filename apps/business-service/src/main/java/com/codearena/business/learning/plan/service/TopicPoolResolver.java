@@ -1,7 +1,7 @@
 package com.codearena.business.learning.plan.service;
 
-import com.codearena.business.problem.domain.ProblemStatsEntity;
-import com.codearena.business.problem.domain.ProblemStatsRepository;
+import com.codearena.business.problem.domain.ProblemEntity;
+import com.codearena.business.problem.domain.ProblemRepository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 public class TopicPoolResolver implements GoalPoolResolver {
 
     private final BankBackedPoolResolver bank;
-    private final ProblemStatsRepository problemStatsRepository;
+    private final ProblemRepository problemRepository;
 
     @Override
     public String goalType() {
@@ -28,31 +28,31 @@ public class TopicPoolResolver implements GoalPoolResolver {
             return fromBank;
         }
         String needle = ref.toLowerCase(Locale.ROOT);
-        List<PoolItem> fromStats = new ArrayList<>();
+        List<PoolItem> fromProblems = new ArrayList<>();
         int order = 0;
-        for (ProblemStatsEntity s : problemStatsRepository.findAll()) {
-            String tags = s.getTopicTags() == null ? "" : s.getTopicTags().toLowerCase(Locale.ROOT);
+        for (ProblemEntity p : problemRepository.findAll()) {
+            String tags = p.getTags() == null ? "" : p.getTags().toLowerCase(Locale.ROOT);
             if (!tags.contains(needle)) {
                 continue;
             }
             if (difficulty != null
                     && !difficulty.isBlank()
                     && !"mixed".equalsIgnoreCase(difficulty)
-                    && s.getDifficulty() != null
-                    && !s.getDifficulty().equalsIgnoreCase(difficulty.trim())) {
+                    && p.getDifficulty() != null
+                    && !p.getDifficulty().equalsIgnoreCase(difficulty.trim())) {
                 continue;
             }
-            fromStats.add(new PoolItem(
-                    s.getProblemId(),
-                    s.getTitle() == null ? ("Problem " + s.getProblemId()) : s.getTitle(),
-                    s.getTitleSlug() == null ? String.valueOf(s.getProblemId()) : s.getTitleSlug(),
-                    s.getDifficulty() == null ? "Medium" : s.getDifficulty(),
+            fromProblems.add(new PoolItem(
+                    p.getProblemId(),
+                    p.getTitle() == null ? ("Problem " + p.getProblemId()) : p.getTitle(),
+                    p.getSlug() == null ? String.valueOf(p.getProblemId()) : p.getSlug(),
+                    p.getDifficulty() == null ? "Medium" : p.getDifficulty(),
                     null,
                     order++));
-            if (fromStats.size() >= limit) {
+            if (fromProblems.size() >= limit) {
                 break;
             }
         }
-        return fromStats;
+        return fromProblems;
     }
 }

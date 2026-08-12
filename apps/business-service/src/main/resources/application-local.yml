@@ -34,6 +34,12 @@ management:
     redis:
       enabled: false
 
+codearena:
+  cache:
+    # 本机默认不连 Redis；Docker / 有 redis-stack 时可 CODEARENA_CACHE_REDIS_ENABLED=true
+    redis-enabled: ${CODEARENA_CACHE_REDIS_ENABLED:false}
+    stats-enabled: ${CODEARENA_CACHE_STATS_ENABLED:true}
+
 # SQL 可见性：默认 INFO；调试时 CODEARENA_SQL_LOG_LEVEL=DEBUG
 logging:
   level:

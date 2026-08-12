@@ -1,9 +1,11 @@
 package com.codearena.business.submission.web;
 
+import com.codearena.business.learning.srs.SrsService;
 import com.codearena.business.problem.domain.ProblemEntity;
 import com.codearena.business.submission.domain.SubmissionEntity;
 import com.codearena.business.problem.domain.ProblemRepository;
 import com.codearena.business.submission.domain.SubmissionRepository;
+import com.codearena.business.shared.cache.UserStatsCacheService;
 import com.codearena.business.user.service.CurrentUserService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
@@ -25,6 +27,8 @@ public class SubmitController {
     private final ProblemRepository problemRepository;
     private final SubmissionRepository submissionRepository;
     private final CurrentUserService currentUserService;
+    private final UserStatsCacheService userStatsCacheService;
+    private final SrsService srsService;
 
     @PostMapping("/submit")
     @Transactional
@@ -58,6 +62,7 @@ public class SubmitController {
                     row.setCode(String.valueOf(payload.get("code")));
                 }
                 submissionRepository.save(row);
+                userStatsCacheService.invalidateUser(currentUser.getId());
             }
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("status", "success");
@@ -86,6 +91,8 @@ public class SubmitController {
         entity.setUserId(currentUser.getId());
         entity.setSubmittedAt(OffsetDateTime.now());
         submissionRepository.save(entity);
+        srsService.recordSubmission(currentUser.getId(), problemId, entity.getStatus());
+        userStatsCacheService.invalidateUser(currentUser.getId());
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", "success");

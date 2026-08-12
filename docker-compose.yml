@@ -88,8 +88,10 @@ services:
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-codearena-local-secret}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://host.docker.internal:3030}
       LOG_JSON: "true"
-    ports:
-      - "${LLM_SERVICE_PORT:-8091}:8091"
+    # 不向宿主机映射端口：仅 Docker 网络内可达，经 Gateway/Nginx 访问。
+    # 调试直连时可临时加 ports: ["8091:8091"]，或用本机 make llm。
+    expose:
+      - "8091"
     depends_on:
       postgres:
         condition: service_healthy
@@ -125,8 +127,10 @@ services:
       SW_AGENT_COLLECTOR: skywalking-oap:11800
     volumes:
       - ./deploy/observability/skywalking/agent:/skywalking:ro
-    ports:
-      - "${BUSINESS_SERVICE_PORT:-8090}:8090"
+    # 不向宿主机映射端口：仅 Docker 网络内可达，经 Gateway/Nginx 访问。
+    # 调试直连时可临时加 ports: ["8090:8090"]，或用本机 make business。
+    expose:
+      - "8090"
     depends_on:
       postgres:
         condition: service_healthy

@@ -12,10 +12,13 @@
 | `list_unpassed_problems` | READ | **Java** | 未 AC 列表 |
 | `get_user_profile_summary` | READ | **Java** | 画像摘要 |
 | `get_topic_mastery` | READ | **Java** | 按标签聚合 |
-| `get_problem_mastery` | READ | **Java** | 单题掌握 |
+| `get_problem_mastery` | READ | **Java** | 单题掌握 + SRS 卡片摘要 |
 | `suggest_next_problems` | READ | **Java** | 续刷/新荐候选 |
-| `generate_study_plan` | WRITE | **Java** | 按目标生成题单 ± 多日日程（company/topic/list） |
-| `get_today_tasks` | READ | **Java** | 今日计划任务 |
+| `resolve_problem_refs` | READ | **Java** | 解析力扣题号/标题 + 已刷/未刷（计划线由 `plan_resolve` 节点必调） |
+| `preview_study_plan` | READ | **Java** | 计划预览（不落库）+ 容量协商 |
+| `generate_study_plan` | WRITE | **Java** | 按目标/自定义题单生成题单 ± 多日日程 |
+| `get_today_tasks` | READ | **Java** | 今日计划 + SRS 复习（`plan` / `review`） |
+| `get_review_due` | READ | **Java** | 仅 SRS 到期复习 |
 | `get_active_plan` | READ | **Java** | 进行中计划摘要 |
 | `recall_memories` | READ | **Java** | 跨会话长期记忆 |
 | `remember` | WRITE | **Java** | 写入长期记忆 |
@@ -86,27 +89,20 @@ Content-Type: application/json
 
 写类长任务的 `202 + task_id` 轮询可后续加；当前 WRITE 仅 `bind_problem` 同步短路径。
 
-## 4. Python 侧（LangGraph）
+## 4. Python 侧
 
-- `app/coach/`：`hydrate → classify → refuse|offer|agent⇄tools → respond → digest?`
-- `app/coach/routing.py`：意图/phase/route 表
-- `app/coach/state.py`：durable vs ephemeral State
-- `app/services/tool_client.py`：`TOOL_SPECS` + `JavaToolClient`
-- Checkpoint：`app/coach/checkpoint.py` — Redis（TTL）优先；`thread_id=smart:{user}:{session}`
+- 图：`app/coach/graph.py`（hydrate → … → persist）
+- 工具客户端：`app/services/tool_client.py`
+- Checkpoint：`app/coach/checkpoint.py`
 
 ## 5. 按用户 LLM Key
 
 | 路径 | 说明 |
 |------|------|
-| `user_llm_settings` 表 | 按 `user_id` 存 provider / model / api_key |
-| `GET/POST /api/users/me/llm/**` | 用户自己的配置 |
-| `GET/POST /api/ops/llm/**` | 运维台同一套逻辑（按 `X-User-Public-Id`） |
-| `GET /internal/users/llm` | llm-service 取**明文** Key（仅内网） |
+| `user_llm_settings` | 按用户存 provider / model / api_key |
+| `/api/users/me/llm/**`、`/api/ops/llm/**` | 配置入口 |
+| `GET /internal/users/llm` | llm-service 取明文 Key（仅内网） |
 
-公开 API 只返回 `has_api_key` + 掩码；可选 `CODEARENA_LLM_KEY_SECRET` 做 AES-GCM 落库。
+公开 API 只返回掩码；可选 `CODEARENA_LLM_KEY_SECRET` AES 落库。
 
-## 6. 与 BUSINESS_FLOW / 记忆模块的关系
-
-- 业务流：[BUSINESS_FLOW.md](./BUSINESS_FLOW.md) — stream 在 Python；工具与 Key 在 Java
-- 记忆三层：[COACH_MEMORY.md](./COACH_MEMORY.md) — checkpoint / sessions / long-term
-- 面试备考 / 专题计划工具与意图扩充：[COACH_PLAN_AGENT.md](./COACH_PLAN_AGENT.md)（`generate_study_plan` 等 **P0 已落地**）
+图与记忆：[COACH_LANGGRAPH.md](./COACH_LANGGRAPH.md)。边界：[BUSINESS_FLOW.md](./BUSINESS_FLOW.md)。

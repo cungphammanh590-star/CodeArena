@@ -5,7 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
-/** 内网调用 token 校验（与业务域无关）。 */
+/** 内网调用 token 校验（与业务域无关）。空配置一律拒绝，禁止跳过。 */
 @Component
 public class InternalTokenGuard {
 
@@ -14,7 +14,8 @@ public class InternalTokenGuard {
 
     public void assertValid(String token) {
         if (internalToken == null || internalToken.isBlank()) {
-            return;
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "internal token not configured");
         }
         if (token == null || !internalToken.equals(token)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "invalid internal token");

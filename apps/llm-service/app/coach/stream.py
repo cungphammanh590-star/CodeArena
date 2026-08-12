@@ -15,6 +15,7 @@ from app.coach.checkpoint import (
 )
 from app.coach.graph import GenerationCancelled, _action_prompt, compile_smart_graph
 from app.coach.phases import coerce_phase
+from app.coach.window import sanitize_messages_for_llm
 from app.observability.langfuse_setup import flush_langfuse, get_langfuse_handler
 from app.observability.usage_recorder import (
     begin_usage_turn,
@@ -27,6 +28,27 @@ from app.services.llm_provider import fetch_user_llm_settings
 from app.services.tool_client import JavaToolClient
 
 logger = logging.getLogger(__name__)
+
+
+def _repair_checkpoint_after_cancel(graph: Any, config: dict[str, Any]) -> None:
+    """取消/断开后清理半截 tool 往返，避免下轮 OpenAI 400。"""
+    try:
+        snapshot = graph.get_state(config)
+        values = (snapshot.values if snapshot else {}) or {}
+        prior = list(values.get("messages") or [])
+        cleaned = sanitize_messages_for_llm(prior)
+        patch: dict[str, Any] = {"pending_tool_rounds": 0}
+        if cleaned != prior:
+            patch["messages"] = cleaned
+        if values.get("awaiting_ask_user") and not values.get("paused_ask"):
+            patch["awaiting_ask_user"] = False
+        graph.update_state(config, patch)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "checkpoint repair after cancel failed",
+            exc_info=True,
+            extra=log_extra(request_id=get_request_id()),
+        )
 
 
 def chat_stream(
@@ -100,6 +122,8 @@ def chat_stream(
 
     tools = JavaToolClient()
     checkpoint_retried = False
+    graph: Any = None
+    reply = ""
     logger.info(
         "coach stream start session=%s action=%s",
         session_id,
@@ -118,7 +142,7 @@ def chat_stream(
             turn_count = int(values.get("turn_count") or 0)
             refuse_short = bool(values.get("refuse_short"))
 
-            messages: list[Any] = list(prior)
+            messages: list[Any] = sanitize_messages_for_llm(list(prior))
             if not messages and session.get("opening"):
                 messages.append(AIMessage(content=str(session.get("opening") or "")))
             messages.append(HumanMessage(content=user_text))
@@ -163,6 +187,8 @@ def chat_stream(
                 "offer_payload": {},
                 "solve_session": values.get("solve_session"),
                 "paused_ask": values.get("paused_ask"),
+                "pending_followup": values.get("pending_followup"),
+                "plan_draft": values.get("plan_draft"),
                 "solve_progress_event": None,
                 "code_run_last": values.get("code_run_last"),
                 "awaiting_ask_user": False,
@@ -264,6 +290,10 @@ def chat_stream(
             yield done_event
             return
         except GenerationCancelled:
+            if graph is not None:
+                _repair_checkpoint_after_cancel(
+                    graph, {"configurable": {"thread_id": cache_key}}
+                )
             flush_langfuse()
             flush_usage_to_business(
                 user_public_id=user_public_id,
@@ -272,6 +302,14 @@ def chat_stream(
                 api_provider=str(llm.get("api_provider") or ""),
                 model=str(llm.get("coach_model") or ""),
             )
+            yield {
+                "type": "done",
+                "done": False,
+                "cancelled": True,
+                "close_scope": "none",
+                "reply": reply,
+                "graph": "smart",
+            }
             return
         except Exception as exc:  # noqa: BLE001
             if not checkpoint_retried and is_checkpoint_connectivity_error(exc):
@@ -282,6 +320,13 @@ def chat_stream(
                 force_memory_checkpointer("runtime redis down")
                 checkpoint_retried = True
                 continue
+            if graph is not None:
+                try:
+                    _repair_checkpoint_after_cancel(
+                        graph, {"configurable": {"thread_id": cache_key}}
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
             logger.exception("coach stream failed")
             flush_langfuse()
             flush_usage_to_business(
@@ -295,5 +340,13 @@ def chat_stream(
             yield {
                 "type": "error",
                 "message": "对话出了点问题，请稍后再试",
+            }
+            yield {
+                "type": "done",
+                "done": False,
+                "close_scope": "none",
+                "reply": "",
+                "graph": "smart",
+                "error": True,
             }
             return

@@ -13,7 +13,10 @@ from app.coach.confirm import (
     CHOICE_PLAN_DP,
     CHOICE_PLAN_GOOGLE,
     CHOICE_PLAN_HOT100,
+    CHOICE_START_FIRST,
     CHOICE_STATUS,
+    CHOICE_TODAY_TASKS,
+    CHOICE_ADJUST_PLAN,
 )
 from app.coach.phases import SmartIntent
 
@@ -40,6 +43,9 @@ _STATUS = (
     "due",
     "复习队列",
     "今天进度",
+    "今日复习",
+    "到期复习",
+    "间隔复习",
 )
 _CONTINUE = (
     "继续",
@@ -185,6 +191,50 @@ def injection_suspect(text: str) -> bool:
     return False
 
 
+_AFFIRM_SHORT = frozenset(
+    {
+        "可以",
+        "可以的",
+        "好",
+        "好的",
+        "行",
+        "行啊",
+        "行的",
+        "嗯",
+        "嗯嗯",
+        "要",
+        "要的",
+        "看看",
+        "先看看",
+        "展示",
+        "显示",
+        "来吧",
+        "开始吧",
+        "ok",
+        "okay",
+        "yes",
+        "y",
+        "确认",
+        "就这样",
+        "按这个",
+        "没问题",
+    }
+)
+
+
+def is_short_affirmation(text: str) -> bool:
+    """短确认/肯定：依赖上一轮要约，不宜单独走大厅 confirm。"""
+    t = (text or "").strip().lower()
+    if not t or len(t) > 24:
+        return False
+    t = t.strip("。.！!？?~～ ")
+    if t in _AFFIRM_SHORT:
+        return True
+    if t.startswith(("可以", "好的", "行", "要", "看看", "展示", "确认")) and len(t) <= 12:
+        return True
+    return False
+
+
 def _match_confirm_choice(text: str) -> SmartIntent | None:
     """用户点击选项发出的固定文案 → 高置信意图。"""
     t = (text or "").strip()
@@ -198,6 +248,9 @@ def _match_confirm_choice(text: str) -> SmartIntent | None:
         (CHOICE_PLAN_GOOGLE, "plan_create"),
         (CHOICE_PLAN_DP, "plan_create"),
         (CHOICE_PLAN_HOT100, "plan_create"),
+        (CHOICE_TODAY_TASKS, "plan_status"),
+        (CHOICE_START_FIRST, "plan_status"),
+        (CHOICE_ADJUST_PLAN, "plan_adjust"),
     ]
     for phrase, intent in mapping:
         if t == phrase or t.endswith(phrase):

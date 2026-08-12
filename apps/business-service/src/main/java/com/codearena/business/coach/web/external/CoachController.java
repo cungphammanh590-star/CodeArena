@@ -104,6 +104,20 @@ public class CoachController {
         return ResponseEntity.ok(body);
     }
 
+    @GetMapping("/api/coach/sessions")
+    public Map<String, Object> sessions(
+            HttpServletRequest request, @RequestParam(defaultValue = "20") int limit) {
+        UserEntity user = currentUserService.require(request);
+        List<Map<String, Object>> items = sessionService.listRecent(user.getId(), limit).stream()
+                .map(sessionService::toListItem)
+                .toList();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "ok");
+        body.put("sessions", items);
+        body.put("count", items.size());
+        return body;
+    }
+
     @GetMapping("/api/coach/session")
     public ResponseEntity<Map<String, Object>> session(
             HttpServletRequest request,
@@ -147,6 +161,8 @@ public class CoachController {
         String mode = str(bodyIn.get("mode"));
         String topic = str(bodyIn.get("topic"));
         Integer problemId = toInt(bodyIn.get("problem_id"));
+        boolean forceNew = Boolean.TRUE.equals(bodyIn.get("force_new"))
+                || "true".equalsIgnoreCase(String.valueOf(bodyIn.get("force_new")));
 
         if (isBlank(mode)
                 && isBlank(submissionId)
@@ -173,11 +189,13 @@ public class CoachController {
                 isBlank(submissionId) ? null : submissionId,
                 problemId,
                 isBlank(mode) ? "default" : mode,
-                isBlank(topic) ? null : topic);
-        Map<String, Object> body = sessionBody(session, user, false);
+                isBlank(topic) ? null : topic,
+                forceNew);
+        Map<String, Object> body = sessionBody(session, user, true);
         body.put("owner", "business-service");
         body.put("stream_path", "/api/coach/stream");
         body.put("opening_source", "template");
+        body.put("reused", !forceNew);
         return ResponseEntity.ok(body);
     }
 

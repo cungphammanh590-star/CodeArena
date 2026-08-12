@@ -2,6 +2,8 @@ package com.codearena.business.learning.mastery.web;
 
 import com.codearena.business.learning.mastery.domain.UserProblemFlagEntity;
 import com.codearena.business.learning.mastery.domain.UserProblemFlagRepository;
+import com.codearena.business.learning.srs.SrsService;
+import com.codearena.business.shared.cache.UserStatsCacheService;
 import com.codearena.business.user.domain.UserEntity;
 import com.codearena.business.user.service.CurrentUserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +28,8 @@ public class MasteryController {
 
     private final UserProblemFlagRepository userProblemFlagRepository;
     private final CurrentUserService currentUserService;
+    private final UserStatsCacheService userStatsCacheService;
+    private final SrsService srsService;
 
     @GetMapping("/api/mastered")
     public Map<String, Object> mastered(HttpServletRequest request) {
@@ -62,6 +66,8 @@ public class MasteryController {
         flag.setMasteredAt(OffsetDateTime.now());
         flag.setNote(note);
         userProblemFlagRepository.save(flag);
+        srsService.setSuspended(user.getId(), problemId, true);
+        userStatsCacheService.invalidateUser(user.getId());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "ok");
         result.put("problem_id", problemId);
@@ -83,6 +89,8 @@ public class MasteryController {
         flag.setMastered(false);
         flag.setMasteredAt(null);
         userProblemFlagRepository.save(flag);
+        srsService.setSuspended(user.getId(), problemId, false);
+        userStatsCacheService.invalidateUser(user.getId());
         return Map.of("status", "ok", "problem_id", problemId, "mastered", false);
     }
 }

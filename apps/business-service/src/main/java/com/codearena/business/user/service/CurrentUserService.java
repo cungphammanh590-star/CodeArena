@@ -8,13 +8,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 解析当前用户（Gateway 已校验 JWT 时会注入可信头）：
+ * 解析当前用户：
  *
  * <ol>
  *   <li>{@code Authorization: Bearer &lt;JWT&gt;} —— 验签 + 会话未吊销
- *   <li>Gateway 注入的 {@code X-User-Public-Id}（仅当同时带有效 Bearer 时信任，防伪造）
- *   <li>开发兼容：无 Bearer 时的 {@code X-User-Public-Id}
- *   <li>否则种子用户 {@code default}
+ *   <li>Gateway 已鉴权注入：{@code X-CodeArena-Gateway-Auth=jwt} + {@code X-User-Public-Id}
+ *   <li>否则忽略客户端伪造的 {@code X-User-Public-Id}，回退种子用户 {@code default}（仅本机直连开发）
  * </ol>
  */
 @Component
@@ -37,15 +36,19 @@ public class CurrentUserService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "登录已失效，请重新登录");
         }
 
-        // Gateway 已鉴权时注入；无 Bearer 的纯头仍作开发兼容
+        String gatewayAuth = request.getHeader(HEADER_GATEWAY_AUTH);
         String publicId = request.getHeader(HEADER_PUBLIC_ID);
-        if (publicId != null && !publicId.isBlank()) {
+        if ("jwt".equalsIgnoreCase(gatewayAuth)
+                && publicId != null
+                && !publicId.isBlank()) {
             UserEntity user = userService.getByPublicId(publicId.trim());
             if (!UserEntity.STATUS_ACTIVE.equals(user.getStatus())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "当前账号无法使用");
             }
             return user;
         }
+
+        // 无 Bearer、无可信 Gateway 头时，不信任客户端 X-User-Public-Id
         return userService.ensureDefaultUser();
     }
 

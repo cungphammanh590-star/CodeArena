@@ -57,7 +57,7 @@ spring:
               args:
                 name: businessService
                 fallbackUri: forward:/fallback/business
-        # Business API catch-all（含 /api/coach/prepare|session|hint、/api/ops/**）
+        # Business API catch-all（含 /api/coach/prepare|session|sessions|hint、/api/ops/**）
         - id: business-api
           uri: ${CODEARENA_BUSINESS_URI:http://localhost:8090}
           predicates:
@@ -133,3 +133,10 @@ codearena:
   auth:
     jwt-secret: ${CODEARENA_JWT_SECRET:codearena-dev-jwt-secret-change-me-32b}
     jwt-issuer: ${CODEARENA_JWT_ISSUER:codearena}
+  security:
+    strict-secrets: ${CODEARENA_STRICT_SECRETS:true}
+  rate-limit:
+    enabled: ${CODEARENA_RATE_LIMIT_ENABLED:true}
+    default-per-minute: ${CODEARENA_RATE_LIMIT_DEFAULT:60}
+    stream-per-minute: ${CODEARENA_RATE_LIMIT_STREAM:20}
+    submit-per-minute: ${CODEARENA_RATE_LIMIT_SUBMIT:20}

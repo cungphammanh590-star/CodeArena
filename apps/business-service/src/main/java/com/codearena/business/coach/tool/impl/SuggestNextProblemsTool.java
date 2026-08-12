@@ -3,20 +3,29 @@ package com.codearena.business.coach.tool.impl;
 import com.codearena.business.coach.tool.CoachTool;
 import com.codearena.business.coach.tool.CoachToolContext;
 import com.codearena.business.coach.tool.CoachToolResult;
+import com.codearena.business.learning.list.domain.ProblemListItemEntity;
+import com.codearena.business.learning.list.domain.ProblemListItemRepository;
+import com.codearena.business.learning.preference.service.LearningPrefsService;
+import com.codearena.business.problem.domain.ProblemEntity;
+import com.codearena.business.problem.domain.ProblemRepository;
+import com.codearena.business.submission.domain.SubmissionRepository;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import com.codearena.business.problem.domain.ProblemStatsRepository;
 
 @Component
 @RequiredArgsConstructor
 public class SuggestNextProblemsTool implements CoachTool {
-    private final ProblemStatsRepository problemStatsRepository;
     private final ListUnpassedProblemsTool unpassed;
+    private final LearningPrefsService learningPrefsService;
+    private final ProblemListItemRepository problemListItemRepository;
+    private final ProblemRepository problemRepository;
+    private final SubmissionRepository submissionRepository;
 
     @Override
     public String name() {
@@ -30,7 +39,7 @@ public class SuggestNextProblemsTool implements CoachTool {
 
     @Override
     public String description() {
-        return "选题：有未通过则返回续刷候选，否则返回规则引擎新题候选。禁止推荐列表外题号。";
+        return "选题：有未通过则返回续刷候选，否则从活跃题单推荐未 AC 题。禁止推荐列表外题号。";
     }
 
     @Override
@@ -53,21 +62,56 @@ public class SuggestNextProblemsTool implements CoachTool {
             data.put("note", "规则：优先未通过题；禁止列表外题号");
             return CoachToolResult.success(data);
         }
-        List<Map<String, Object>> candidates = problemStatsRepository.findAll().stream()
-                .filter(s -> s.getAcceptedCount() == null || s.getAcceptedCount() == 0)
-                .limit(limit)
-                .map(s -> {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("problem_id", s.getProblemId());
-                    m.put("title", s.getTitle());
-                    m.put("difficulty", s.getDifficulty());
-                    return m;
-                })
-                .toList();
+
+        Long userId = context.userId();
+        String listId = "hot100";
+        if (userId != null) {
+            listId = String.valueOf(
+                    learningPrefsService.toLearningMap(learningPrefsService.getOrCreate(userId))
+                            .get("active_list_id"));
+        }
+        Set<Integer> accepted = userId == null
+                ? Set.of()
+                : new HashSet<>(
+                        submissionRepository.findDistinctProblemIdsByUserIdAndStatus(
+                                userId, "Accepted"));
+
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        for (ProblemListItemEntity item :
+                problemListItemRepository.findByListIdOrderBySortOrderAsc(listId)) {
+            if (accepted.contains(item.getProblemId())) {
+                continue;
+            }
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("problem_id", item.getProblemId());
+            m.put("title", item.getTitle());
+            m.put("difficulty", item.getDifficulty());
+            candidates.add(m);
+            if (candidates.size() >= limit) {
+                break;
+            }
+        }
+        if (candidates.isEmpty()) {
+            for (ProblemEntity p : problemRepository.findAll()) {
+                if (accepted.contains(p.getProblemId())) {
+                    continue;
+                }
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("problem_id", p.getProblemId());
+                m.put("title", p.getTitle());
+                m.put("difficulty", p.getDifficulty());
+                candidates.add(m);
+                if (candidates.size() >= limit) {
+                    break;
+                }
+            }
+        }
+
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("mode", "recommend_new");
         data.put("candidates", candidates);
-        data.put("note", "规则引擎候选；禁止推荐列表外题号");
+        data.put("active_list_id", listId);
+        data.put("note", "活跃题单未 AC 候选；禁止推荐列表外题号");
         return CoachToolResult.success(data);
     }
 }

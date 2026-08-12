@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import AppHeader from "@/components/AppHeader.vue";
 import MetricCard from "@/components/MetricCard.vue";
@@ -37,13 +37,12 @@ const {
   aggregatedDayProblems,
 } = storeToRefs(stats);
 
-const { reviewDue } = storeToRefs(learning);
+const { planToday, reviewDue } = storeToRefs(learning);
 
 const problemsQuery = ref("");
 const problemsPage = ref(1);
 const wrongPage = ref(1);
-
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+const refreshing = ref(false);
 
 const filteredProblems = computed(() => {
   const raw = problemsQuery.value.trim().toLowerCase();
@@ -90,16 +89,21 @@ function onPick(date: string) {
   if (date) stats.setSelectedDate(date);
 }
 
-onMounted(() => {
-  stats.refresh({ reloadProblems: true });
-  learning.load();
-  pollTimer = setInterval(() => {
-    if (isViewingToday.value) stats.refresh();
-  }, 3000);
-});
+async function onRefresh() {
+  if (refreshing.value) return;
+  refreshing.value = true;
+  try {
+    await Promise.all([
+      stats.refresh({ reloadProblems: true }),
+      learning.load(),
+    ]);
+  } finally {
+    refreshing.value = false;
+  }
+}
 
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer);
+onMounted(() => {
+  onRefresh();
 });
 </script>
 
@@ -110,6 +114,16 @@ onUnmounted(() => {
       <template v-if="currentUsername">
         · {{ currentUsername }}
       </template>
+    </template>
+    <template #actions>
+      <button
+        type="button"
+        class="btn-secondary"
+        :disabled="refreshing"
+        @click="onRefresh"
+      >
+        {{ refreshing ? "刷新中…" : "刷新" }}
+      </button>
     </template>
   </AppHeader>
 
@@ -150,6 +164,39 @@ onUnmounted(() => {
 
     <section class="section-card">
       <div class="section-head">
+        <h2>今日计划</h2>
+        <span class="section-meta">
+          {{ planToday.length ? planToday.length + " 题待刷" : "" }}
+        </span>
+      </div>
+      <table v-if="planToday.length" class="data-table">
+        <thead>
+          <tr>
+            <th>题目</th>
+            <th>难度</th>
+            <th>来源</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="c in planToday" :key="'p-' + (c.problem_id || c.id)">
+            <td>
+              <RouterLink
+                class="link-title"
+                :to="`/problems/${c.problem_id || c.id}`"
+              >
+                {{ c.problem_id || c.id }}. {{ c.title || "（无标题）" }}
+              </RouterLink>
+            </td>
+            <td>{{ c.difficulty || "-" }}</td>
+            <td class="reason-cell">{{ c.reason || "今日计划任务" }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="empty">今天没有计划任务。去做一题或去陪练生成计划。</p>
+    </section>
+
+    <section class="section-card">
+      <div class="section-head">
         <h2>今日复习</h2>
         <span class="section-meta">
           {{ reviewDue.length ? reviewDue.length + " 题到期" : "" }}
@@ -164,21 +211,23 @@ onUnmounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="c in reviewDue" :key="c.problem_id || c.id">
+          <tr v-for="c in reviewDue" :key="'r-' + (c.problem_id || c.id)">
             <td>
               <RouterLink
                 class="link-title"
                 :to="`/problems/${c.problem_id || c.id}`"
               >
-                {{ c.problem_id || c.id }}. {{ c.title }}
+                {{ c.problem_id || c.id }}. {{ c.title || "（无标题）" }}
               </RouterLink>
             </td>
             <td>{{ c.difficulty || "-" }}</td>
-            <td class="reason-cell">{{ c.reason || "" }}</td>
+            <td class="reason-cell">{{ c.reason || "间隔复习到期" }}</td>
           </tr>
         </tbody>
       </table>
-      <p v-else class="empty">今天没有到期复习。去做一题或去陪练聊聊计划。</p>
+      <p v-else class="empty">
+        今天没有到期复习。通过一题后会进入间隔复习队列。
+      </p>
     </section>
 
     <section class="section-card">

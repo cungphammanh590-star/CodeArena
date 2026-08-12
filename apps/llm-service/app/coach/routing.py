@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from app.coach.intent_smart import (
     CONFIRM_CONFIDENCE_THRESHOLD,
     classify_smart_intent,
     injection_suspect,
     intent_to_phase,
+    is_short_affirmation,
     should_reclassify,
     wants_code_原文,
 )
@@ -26,6 +27,7 @@ def resolve_route(
     prev_phase: str,
     confidence: float = 1.0,
     injection: bool = False,
+    pending_followup: Optional[dict] = None,
 ) -> tuple[str, str, str]:
     """返回 (route, phase, close_scope)。
 
@@ -36,6 +38,7 @@ def resolve_route(
     act = str(action or "").strip()
     kind = str(session_kind or "lobby")
     new_phase = phase
+    has_followup = isinstance(pending_followup, dict) and bool(pending_followup.get("action"))
 
     if act == "close":
         close_scope = "problem_segment"
@@ -53,9 +56,17 @@ def resolve_route(
     if intent == "off_topic":
         return "refuse", "lobby", close_scope
 
+    # 计划构建进行中 / 有待兑现 CTA：短确认与计划意图一律进 agent
+    if prev_phase == "plan_active" or new_phase == "plan_active" or has_followup:
+        if intent in {"plan_create", "plan_adjust", "plan_status", "clarify", "status_review"}:
+            keep_phase = "plan_active" if intent in {"plan_create", "plan_adjust", "clarify"} else new_phase
+            if intent == "plan_status" or intent == "status_review":
+                keep_phase = "today_brief"
+            return "agent", keep_phase, close_scope
+
     # 刷题计划：禁止走 offer 单题 CTA
     if intent == "plan_create":
-        if confidence < CONFIRM_CONFIDENCE_THRESHOLD:
+        if confidence < CONFIRM_CONFIDENCE_THRESHOLD and not has_followup:
             return "confirm", "lobby", close_scope
         return "agent", "plan_active", close_scope
     if intent == "plan_adjust":
@@ -114,6 +125,9 @@ def classify_turn(state: dict[str, Any]) -> dict[str, Any]:
     session_kind = str(state.get("session_kind") or "lobby")
     topic = str(state.get("topic") or "")
     injection = injection_suspect(user_text)
+    pending = state.get("pending_followup")
+    pending_dict = pending if isinstance(pending, dict) else None
+    pending_action = str((pending_dict or {}).get("action") or "").strip()
 
     if should_reclassify(phase=prev_phase, turn_count=turn, user_text=user_text):
         intent, confidence = classify_smart_intent(
@@ -125,6 +139,18 @@ def classify_turn(state: dict[str, Any]) -> dict[str, Any]:
     else:
         intent = str(state.get("intent") or "in_problem_help") or "in_problem_help"
         confidence = 0.85
+
+    # 计划任务进行中的短确认：改写为兑现 pending / 继续计划，避免大厅 confirm
+    if is_short_affirmation(user_text) and (
+        prev_phase == "plan_active" or pending_action
+    ):
+        if pending_action in {"show_today_tasks", "bind_first_task"}:
+            intent, confidence = "plan_status", 0.95
+        elif pending_action in {"confirm_plan", "confirm_plan_params"}:
+            intent, confidence = "plan_create", 0.95
+        else:
+            # 已在计划线、无明确 pending：优先兑现「看任务/进度」，勿回大厅
+            intent, confidence = "plan_status", 0.9
 
     if injection and intent != "off_topic":
         # 不把注入句直接当题内帮助
@@ -146,9 +172,10 @@ def classify_turn(state: dict[str, Any]) -> dict[str, Any]:
         prev_phase=prev_phase,
         confidence=confidence,
         injection=injection,
+        pending_followup=pending_dict,
     )
 
-    return {
+    out: dict[str, Any] = {
         "intent": intent,
         "phase": new_phase,
         "turn_count": turn,
@@ -159,3 +186,4 @@ def classify_turn(state: dict[str, Any]) -> dict[str, Any]:
         "intent_confidence": confidence,
         "injection_suspect": injection,
     }
+    return out

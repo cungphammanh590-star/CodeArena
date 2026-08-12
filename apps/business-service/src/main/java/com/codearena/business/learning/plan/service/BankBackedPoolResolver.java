@@ -57,6 +57,10 @@ public class BankBackedPoolResolver {
         map.put("microsoft", "Microsoft");
         map.put("apple", "Apple");
         map.put("苹果", "Apple");
+        map.put("bytedance", "ByteDance");
+        map.put("byte dance", "ByteDance");
+        map.put("字节", "ByteDance");
+        map.put("字节跳动", "ByteDance");
         return map.getOrDefault(lower, t.isEmpty() ? t : Character.toUpperCase(t.charAt(0)) + t.substring(1));
     }
 

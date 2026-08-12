@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import api from "@/api/client";
 import AppHeader from "@/components/AppHeader.vue";
@@ -34,8 +34,7 @@ const mastered = ref(false);
 const masterBusy = ref(false);
 const masterRowVisible = ref(false);
 const errorText = ref("");
-
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+const refreshing = ref(false);
 
 const masterBtnText = computed(() =>
   mastered.value ? "取消掌握" : "标记已掌握",
@@ -119,11 +118,15 @@ async function load() {
     errorText.value = "无效的题号";
     return;
   }
+  if (refreshing.value) return;
+  refreshing.value = true;
   try {
     const { data } = await api.get(`/problems/${pid}/stats`);
     renderFromData(data);
   } catch (err) {
     errorText.value = toUserMessage(err, "题目详情加载失败，请稍后再试");
+  } finally {
+    refreshing.value = false;
   }
 }
 
@@ -152,11 +155,6 @@ watch(problemId, () => load());
 
 onMounted(() => {
   load();
-  pollTimer = setInterval(load, 5000);
-});
-
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer);
 });
 </script>
 
@@ -180,33 +178,38 @@ onUnmounted(() => {
       </template>
     </template>
     <template #actions>
-      <RouterLink
-        class="btn-primary coach-link"
-        :to="`/coach?problem_id=${problemId}`"
-      >
-        本题陪练
-      </RouterLink>
-    </template>
-    <template #after-title>
-      <div v-if="masterRowVisible" class="master-row">
+      <div class="problem-actions">
         <button
+          v-if="masterRowVisible"
           type="button"
           class="btn-secondary"
           :class="{ on: mastered }"
           :disabled="masterBusy"
-          :title="
-            mastered
-              ? '取消后，本题可再次出现在推荐与复习里'
-              : '标记后不再出现在推荐与复习里'
-          "
+          :title="masterHint"
           @click="toggleMastered"
         >
           {{ masterBtnText }}
         </button>
-        <span class="master-hint">{{ masterHint }}</span>
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="refreshing"
+          @click="load"
+        >
+          {{ refreshing ? "刷新中…" : "刷新" }}
+        </button>
+        <RouterLink
+          class="btn-primary"
+          :to="`/coach?problem_id=${problemId}`"
+        >
+          本题陪练
+        </RouterLink>
       </div>
+    </template>
+    <template #after-title>
       <div class="tags">
-        <span v-if="!tags.length" class="tag">无标签</span>
+        <span v-if="mastered" class="tag tag-mastered">已掌握</span>
+        <span v-if="!tags.length && !mastered" class="tag">无标签</span>
         <span v-for="t in tags" :key="t" class="tag">{{ t }}</span>
       </div>
     </template>
@@ -338,44 +341,52 @@ onUnmounted(() => {
   margin-bottom: 10px;
   color: var(--muted);
 }
-.coach-link {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
-}
-.coach-link:hover {
-  text-decoration: none;
-}
-.master-row {
+.problem-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
+  justify-content: flex-end;
+  gap: 8px;
 }
-.master-row .btn-secondary.on {
+.problem-actions :is(.btn-primary, .btn-secondary) {
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.problem-actions a.btn-primary {
+  text-decoration: none;
+}
+.problem-actions a.btn-primary:hover {
+  text-decoration: none;
+}
+.problem-actions .btn-secondary.on {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
-}
-.master-hint {
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.35;
 }
 .tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .tag {
-  font-size: 11px;
+  font-size: 12px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--soft);
   color: var(--muted);
   font-weight: 500;
+}
+.tag-mastered {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 :deep(.diff-easy) {
   color: var(--ok);

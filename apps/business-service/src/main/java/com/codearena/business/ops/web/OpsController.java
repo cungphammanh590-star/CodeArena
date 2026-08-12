@@ -93,7 +93,8 @@ public class OpsController {
                 "status", "ok",
                 "problems", 0,
                 "from_scratch", fromScratch,
-                "message", "stub: rebuild will be implemented against submissions"));
+                "message",
+                "problem_stats 已移除；用户维统计由 submissions 实时/Redis 投影，点仪表盘刷新即可"));
     }
 
     /** LLM 配置按当前用户持久化；推理仍在 llm-service。 */

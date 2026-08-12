@@ -1,11 +1,13 @@
 package com.codearena.business.learning.list.web;
 
-import com.codearena.business.learning.preference.domain.LearningPrefsEntity;
 import com.codearena.business.learning.list.domain.ProblemListEntity;
 import com.codearena.business.learning.list.domain.ProblemListItemEntity;
-import com.codearena.business.learning.preference.domain.LearningPrefsRepository;
 import com.codearena.business.learning.list.domain.ProblemListItemRepository;
 import com.codearena.business.learning.list.domain.ProblemListRepository;
+import com.codearena.business.learning.preference.service.LearningPrefsService;
+import com.codearena.business.user.domain.UserEntity;
+import com.codearena.business.user.service.CurrentUserService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,7 +33,8 @@ public class ListController {
 
     private final ProblemListRepository problemListRepository;
     private final ProblemListItemRepository problemListItemRepository;
-    private final LearningPrefsRepository learningPrefsRepository;
+    private final LearningPrefsService learningPrefsService;
+    private final CurrentUserService currentUserService;
 
     @GetMapping("/api/lists")
     public Map<String, Object> lists() {
@@ -104,7 +107,9 @@ public class ListController {
 
     @PostMapping("/api/lists")
     @Transactional
-    public ResponseEntity<?> create(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> create(
+            HttpServletRequest request, @RequestBody Map<String, Object> body) {
+        UserEntity user = currentUserService.require(request);
         String name = body == null ? "" : String.valueOf(body.getOrDefault("name", "")).trim();
         if (name.isEmpty()) {
             return ResponseEntity.badRequest()
@@ -118,7 +123,7 @@ public class ListController {
         }
         if (problemListRepository.existsById(listId)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("status", "error", "message", "题单已存在: " + listId));
+                    .body(Map.of("status", "error", "message", "题单 ID 已存在: " + listId));
         }
         ProblemListEntity entity = new ProblemListEntity();
         entity.setId(listId);
@@ -130,7 +135,7 @@ public class ListController {
         problemListRepository.save(entity);
 
         if (Boolean.TRUE.equals(body.get("set_active"))) {
-            setActive(listId);
+            learningPrefsService.setActiveList(user.getId(), listId);
         }
 
         Map<String, Object> listMap = new LinkedHashMap<>();
@@ -143,7 +148,9 @@ public class ListController {
 
     @PostMapping("/api/lists/active")
     @Transactional
-    public ResponseEntity<?> setActiveList(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> setActiveList(
+            HttpServletRequest request, @RequestBody Map<String, Object> body) {
+        UserEntity user = currentUserService.require(request);
         String listId = body == null ? "" : String.valueOf(body.getOrDefault("list_id", "")).trim();
         if (listId.isEmpty()) {
             return ResponseEntity.badRequest()
@@ -155,13 +162,15 @@ public class ListController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("status", "error", "message", "题单不存在: " + listId));
         }
-        Map<String, Object> learning = setActive(listId);
+        Map<String, Object> learning = learningPrefsService.setActiveList(user.getId(), listId);
         return ResponseEntity.ok(Map.of("status", "ok", "learning", learning));
     }
 
     @PostMapping("/api/lists/import")
     @Transactional
-    public ResponseEntity<?> importList(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> importList(
+            HttpServletRequest request, @RequestBody Map<String, Object> body) {
+        UserEntity user = currentUserService.require(request);
         if (body == null) {
             return ResponseEntity.badRequest()
                     .body(Map.of("status", "error", "message", "请先选择或新建题单"));
@@ -216,7 +225,7 @@ public class ListController {
         }
 
         if (Boolean.TRUE.equals(body.get("set_active"))) {
-            setActive(listId);
+            learningPrefsService.setActiveList(user.getId(), listId);
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -244,7 +253,9 @@ public class ListController {
 
     @DeleteMapping("/api/lists/{listId}")
     @Transactional
-    public ResponseEntity<?> deleteList(@PathVariable String listId) {
+    public ResponseEntity<?> deleteList(
+            HttpServletRequest request, @PathVariable String listId) {
+        UserEntity user = currentUserService.require(request);
         return problemListRepository
                 .findById(listId)
                 .map(list -> {
@@ -256,7 +267,8 @@ public class ListController {
                             .findByListIdOrderBySortOrderAsc(listId)
                             .forEach(problemListItemRepository::delete);
                     problemListRepository.delete(list);
-                    Map<String, Object> learning = setActive("hot100");
+                    Map<String, Object> learning =
+                            learningPrefsService.setActiveList(user.getId(), "hot100");
                     return ResponseEntity.ok(Map.of(
                             "status", "ok",
                             "deleted", listId,
@@ -264,25 +276,6 @@ public class ListController {
                 })
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("status", "error", "message", "题单不存在: " + listId)));
-    }
-
-    private Map<String, Object> setActive(String listId) {
-        LearningPrefsEntity prefs = learningPrefsRepository
-                .findFirstByOrderByIdAsc()
-                .orElseGet(LearningPrefsEntity::new);
-        if (prefs.getListMode() == null) {
-            prefs.setListMode(true);
-        }
-        if (prefs.getKgMode() == null) {
-            prefs.setKgMode(true);
-        }
-        prefs.setActiveListId(listId);
-        prefs.setUpdatedAt(OffsetDateTime.now());
-        learningPrefsRepository.save(prefs);
-        return Map.of(
-                "list_mode", prefs.getListMode(),
-                "kg_mode", prefs.getKgMode(),
-                "active_list_id", prefs.getActiveListId());
     }
 
     private List<Map<String, Object>> listSummaries() {

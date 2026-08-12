@@ -34,6 +34,10 @@ defineProps<{
 .header-actions {
   position: relative;
   flex-shrink: 0;
-  padding-top: 4px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
 }
 </style>

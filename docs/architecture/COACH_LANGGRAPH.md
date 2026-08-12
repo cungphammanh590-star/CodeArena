@@ -1,8 +1,7 @@
 # 陪练 LangGraph 架构特性（当前定义）
 
 本文描述 **CodeArena `llm-service` 当前已实现** 的图、State、Checkpoint 与流转，而非规划草案。  
-相关：记忆三层见 [COACH_MEMORY.md](./COACH_MEMORY.md)；工具边界见 [COACH_TOOLS.md](./COACH_TOOLS.md)；  
-面试备考计划场景的扩充计划见 [COACH_PLAN_AGENT.md](./COACH_PLAN_AGENT.md)（意图 / 图 / 工具，尚未全部落地）。
+详见：[COACH_TOOLS.md](./COACH_TOOLS.md)、[BUSINESS_FLOW.md](./BUSINESS_FLOW.md)。记忆分层见本文 §7。
 
 ---
 
@@ -32,13 +31,16 @@ flowchart TD
 ## 2. 图拓扑与节点定义
 
 ```text
-START → hydrate → classify → refuse | offer | confirm | agent ⇄ tools → finalize → persist → END
+START → hydrate → classify → refuse | offer | confirm | **plan_resolve** → agent ⇄ tools → finalize → persist → END
+
+`plan_resolve`：当 `route=agent` 且用户消息像力扣题单时插入。流水线：规则抽题号 → Java `resolve_problem_refs` → 本地 `lc_catalog` → **仍有 unmatched 时单独一轮结构化 LLM 补齐**（不进主对话 messages）→ 写入 `plan_draft` / `pending_followup=confirm_plan` → agent preview/generate。未匹配不阻断。
 ```
 
 | 节点 | 是否调 LLM | 定义 |
 |------|------------|------|
 | **hydrate** | 否 | 调 `get_session_context` 对齐 topic/kind/problem/phase/summary；若本回合几乎无历史则从 `coach_turns` 回填 messages；拉画像/`memory_digest`；预取 `offer_payload`。**无有效 L2 phase 时回退 `lobby`**，禁止凭空升为 `in_problem` |
 | **classify** | 否 | 规则意图 + 置信度 + 注入软信号 → `intent` / `route` / `close_scope`；低置信或注入 → **`confirm`** |
+| **plan_resolve** | 否 | 题单像力扣列表时：`resolve_problem_refs` + `lc_catalog` → `plan_draft`；再进 agent |
 | **refuse** | 否 | 离题：边界话术 + CTA |
 | **offer** | 否 | 空闲/收束选题话术（高置信续刷/新荐） |
 | **confirm** | 否 | 灰区：SSE `confirm` 下发可点击选项；用户点选后把固定文案当用户消息发出 |
@@ -49,7 +51,8 @@ START → hydrate → classify → refuse | offer | confirm | agent ⇄ tools �
 
 条件边：
 
-- `classify` → `route` ∈ `{refuse, offer, confirm, agent}`
+- `classify` → `route` ∈ `{refuse, offer, confirm, agent, plan_resolve}`
+- `plan_resolve` → `agent`
 - `agent` → 有 tool_calls 且未超轮次 → `tools`，否则 → `finalize`
 - `tools` → `agent`
 - `refuse` / `offer` / `confirm` → `finalize` → `persist` → `END`
@@ -186,13 +189,13 @@ START → hydrate → classify → refuse | offer | confirm | agent ⇄ tools �
 
 ## 7. 与三层记忆的对应
 
-| 层 | 何时读/写 | 谁写 |
-|----|-----------|------|
-| L1 Checkpoint | 每回合 graph 自动读写 | LangGraph checkpointer |
-| L2 sessions/turns | hydrate 读；**persist 每回合写** | Java tools |
-| L3 memories | hydrate 经画像附带；persist/`remember` 写 | Java tools |
+| 层 | 存储 | 何时读/写 | 谁写 |
+|----|------|-----------|------|
+| L1 | Redis Checkpoint / MemorySaver | 每回合 graph 自动 | LangGraph |
+| L2 | `coach_sessions` + `coach_turns` | hydrate 读；**persist 每回合写** | Java tools |
+| L3 | `user_coach_memories` | hydrate / `remember` | Java tools |
 
-口诀：**短期靠图状态，中期靠会话表，长期靠用户记忆表；库只听 Java；图成功与落库同一路径。**
+口诀：**短期靠图状态，中期靠会话表，长期靠用户记忆；库只听 Java。** 不做向量 RAG（暂缓）。
 
 ---
 
@@ -231,16 +234,10 @@ START → hydrate → classify → refuse | offer | confirm | agent ⇄ tools �
 | SSE 驱动 | `apps/llm-service/app/coach/stream.py` |
 | 意图/阶段 | `intent_smart.py` / `phases.py` |
 | 窗口/摘要 | `window.py` |
-| Java 会话 | `coach/memory/*`；Flyway V3=`coach_code_runs` + mastery 占位 |
+| Java 会话 | `apps/business-service/.../coach/memory/*` |
 
 ---
 
-## 10. Backlog（未做）
+## 10. Backlog（择要）
 
-- classify 灰区用极小 `classifier_llm`（当前以 confirm 选项代替）
-- hydrate 并行 `Send` 降首字延迟
-- 真 LangGraph `interrupt`（P0 用伪 interrupt）
-- 真·token 计数器（tiktoken）替代 4 字近似
-- 沙箱 bwrap / sidecar；c/cpp 语言
-- `append_code_run` Java 审计工具（表已就绪）
-- mastery / spaced repetition（表已占位）
+沙箱加固、真 interrupt、`append_code_run`、SRS —— 见 [ROADMAP.md](./ROADMAP.md)。

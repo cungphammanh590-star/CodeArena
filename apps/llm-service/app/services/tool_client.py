@@ -169,27 +169,57 @@ JAVA_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "generate_study_plan",
+            "name": "resolve_problem_refs",
             "description": (
-                "按用户目标生成刷题题单，并可排多日日程。"
-                "goal_type=company|topic|list；goal_ref=公司名/专题名/题单id（如 Google、动态规划、hot100）。"
-                "用户说了天数则传 days 且 schedule=true；只要题单则 schedule=false。"
-                "不要自行编造长题号列表。"
+                "解析用户粘贴的力扣题号/标题，返回 matched/ambiguous/unmatched，"
+                "并标注 accepted/mastered 与 remaining_ids。"
+                "用 matched/remaining_ids 继续 preview/generate；unmatched 只告知用户，不阻断。"
+                "仅 matched 为空时才需澄清。用户给自定义题单时先调用本工具。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "queries": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "题号或标题列表，如 [\"206\",\"反转链表\",\"LC 3\"]",
+                    },
+                    "raw_text": {
+                        "type": "string",
+                        "description": "用户原始题单文本（可与 queries 二选一或同时）",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "preview_study_plan",
+            "description": (
+                "预览刷题计划（不落库）：推算天数/每日题量，过滤已刷题。"
+                "自定义题单传 problem_ids（来自 resolve_problem_refs.remaining_ids）。"
+                "即使有 unmatched 也应用已匹配题号继续；把未识别项告诉用户即可，不要阻断整份计划。"
+                "若 need_user_choice=true，用 ask_user 让用户放宽天数或强度；确认后再 generate_study_plan。"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "goal_type": {
                         "type": "string",
-                        "description": "company | topic | list",
+                        "description": "company | topic | list | custom",
                     },
                     "goal_ref": {
                         "type": "string",
-                        "description": "目标引用：Google / 动态规划 / hot100 等",
+                        "description": "目标引用；custom 可填标题如「字节高频」",
                     },
                     "title": {"type": "string", "description": "可选题单标题"},
-                    "days": {"type": "integer", "description": "日程天数 7～90"},
-                    "daily_goal": {"type": "integer", "description": "每日题量 2～5"},
+                    "days": {"type": "integer", "description": "日程天数；只给天数则推每日题量"},
+                    "daily_goal": {
+                        "type": "integer",
+                        "description": "每日题量；只给强度则推天数",
+                    },
                     "schedule": {
                         "type": "boolean",
                         "description": "是否排多日日程；默认有 days 则为 true",
@@ -199,8 +229,70 @@ JAVA_TOOL_SPECS: list[dict[str, Any]] = [
                         "description": "可选 Easy|Medium|Hard|mixed",
                     },
                     "limit": {"type": "integer", "description": "题池上限"},
+                    "problem_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "自定义题号列表（优先于 bank 题池）",
+                    },
+                    "skip_passed": {
+                        "type": "boolean",
+                        "description": "是否跳过已 Accepted/已掌握，默认 true",
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "容量冲突时仍按推荐值预览/生成",
+                    },
                 },
-                "required": ["goal_type", "goal_ref"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_study_plan",
+            "description": (
+                "生成刷题题单并排日程（写库）。"
+                "自定义题单：先 resolve_problem_refs → preview_study_plan，用户确认后再调用，传 problem_ids。"
+                "goal_type=company|topic|list|custom；不要自行编造长题号列表。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal_type": {
+                        "type": "string",
+                        "description": "company | topic | list | custom",
+                    },
+                    "goal_ref": {
+                        "type": "string",
+                        "description": "目标引用：Google / 动态规划 / hot100 / 自定义标题",
+                    },
+                    "title": {"type": "string", "description": "可选题单标题"},
+                    "days": {"type": "integer", "description": "日程天数 7～90"},
+                    "daily_goal": {"type": "integer", "description": "每日题量 2～5（冲突时可更高需 force）"},
+                    "schedule": {
+                        "type": "boolean",
+                        "description": "是否排多日日程；默认有 days 则为 true",
+                    },
+                    "difficulty": {
+                        "type": "string",
+                        "description": "可选 Easy|Medium|Hard|mixed",
+                    },
+                    "limit": {"type": "integer", "description": "题池上限"},
+                    "problem_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "自定义题号（来自 resolve/preview）",
+                    },
+                    "skip_passed": {
+                        "type": "boolean",
+                        "description": "跳过已刷，默认 true",
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "容量冲突时强制按推荐值生成",
+                    },
+                },
                 "additionalProperties": False,
             },
         },
@@ -209,10 +301,24 @@ JAVA_TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_today_tasks",
-            "description": "查询当前用户今日刷题计划任务列表。",
+            "description": "查询今日待办：计划排期（plan）+ 间隔复习到期（review）。回答时请分开说明。",
             "parameters": {
                 "type": "object",
                 "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_review_due",
+            "description": "仅查询今日 SRS 到期复习题（与计划排期无关）。用户说「今日复习」时优先调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "最多返回题数，默认 20"},
+                },
                 "additionalProperties": False,
             },
         },

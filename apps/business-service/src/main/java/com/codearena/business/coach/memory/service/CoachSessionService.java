@@ -30,42 +30,61 @@ public class CoachSessionService {
             Integer problemId,
             String mode,
             String topic) {
+        return prepare(user, submissionId, problemId, mode, topic, false);
+    }
+
+    @Transactional
+    public CoachSessionEntity prepare(
+            UserEntity user,
+            String submissionId,
+            Integer problemId,
+            String mode,
+            String topic,
+            boolean forceNew) {
         String safeMode = (mode == null || mode.isBlank()) ? "default" : mode.trim();
         String sid = submissionId == null || submissionId.isBlank() ? null : submissionId.trim();
         String safeTopic = topic == null ? "" : topic.trim();
 
-        if (!safeTopic.isBlank()) {
-            Optional<CoachSessionEntity> existing =
-                    sessionRepository.findFirstByUserIdAndTopicAndStatusOrderByUpdatedAtDesc(
-                            user.getId(), safeTopic, CoachSessionEntity.STATUS_ACTIVE);
-            if (existing.isPresent()) {
-                return existing.get();
-            }
-        } else if (sid != null) {
-            Optional<CoachSessionEntity> existing =
-                    sessionRepository.findFirstByUserIdAndSubmissionIdAndStatusOrderByUpdatedAtDesc(
-                            user.getId(), sid, CoachSessionEntity.STATUS_ACTIVE);
-            if (existing.isPresent()) {
-                return existing.get();
-            }
-        } else if (problemId != null && problemId > 0 && !isProfileMode(safeMode)) {
-            Optional<CoachSessionEntity> existing =
-                    sessionRepository.findFirstByUserIdAndProblemIdAndStatusOrderByUpdatedAtDesc(
-                            user.getId(), problemId, CoachSessionEntity.STATUS_ACTIVE);
-            if (existing.isPresent()) {
-                return existing.get();
+        if (!forceNew) {
+            if (!safeTopic.isBlank()) {
+                Optional<CoachSessionEntity> existing =
+                        sessionRepository.findFirstByUserIdAndTopicAndStatusOrderByUpdatedAtDesc(
+                                user.getId(), safeTopic, CoachSessionEntity.STATUS_ACTIVE);
+                if (existing.isPresent()) {
+                    return existing.get();
+                }
+            } else if (sid != null) {
+                Optional<CoachSessionEntity> existing =
+                        sessionRepository.findFirstByUserIdAndSubmissionIdAndStatusOrderByUpdatedAtDesc(
+                                user.getId(), sid, CoachSessionEntity.STATUS_ACTIVE);
+                if (existing.isPresent()) {
+                    return existing.get();
+                }
+            } else if (problemId != null && problemId > 0 && !isProfileMode(safeMode)) {
+                Optional<CoachSessionEntity> existing =
+                        sessionRepository.findFirstByUserIdAndProblemIdAndStatusOrderByUpdatedAtDesc(
+                                user.getId(), problemId, CoachSessionEntity.STATUS_ACTIVE);
+                if (existing.isPresent()) {
+                    return existing.get();
+                }
+            } else if ("lobby".equals(safeMode)
+                    || (("default".equals(safeMode) || safeMode.isBlank())
+                            && (problemId == null || problemId <= 0)
+                            && sid == null
+                            && safeTopic.isBlank())) {
+                Optional<CoachSessionEntity> existing =
+                        sessionRepository.findFirstByUserIdAndSessionKindAndStatusOrderByUpdatedAtDesc(
+                                user.getId(), "lobby", CoachSessionEntity.STATUS_ACTIVE);
+                if (existing.isPresent()) {
+                    return existing.get();
+                }
+                safeMode = "lobby";
             }
         } else if ("lobby".equals(safeMode)
                 || (("default".equals(safeMode) || safeMode.isBlank())
                         && (problemId == null || problemId <= 0)
                         && sid == null
                         && safeTopic.isBlank())) {
-            Optional<CoachSessionEntity> existing =
-                    sessionRepository.findFirstByUserIdAndSessionKindAndStatusOrderByUpdatedAtDesc(
-                            user.getId(), "lobby", CoachSessionEntity.STATUS_ACTIVE);
-            if (existing.isPresent()) {
-                return existing.get();
-            }
             safeMode = "lobby";
         }
 
@@ -92,6 +111,48 @@ public class CoachSessionService {
         session.setSummary("");
         session.setOpening(buildOpening(session));
         return sessionRepository.save(session);
+    }
+
+    public List<CoachSessionEntity> listRecent(Long userId, int limit) {
+        int n = Math.max(1, Math.min(50, limit));
+        List<CoachSessionEntity> all =
+                sessionRepository.findTop20ByUserIdOrderByUpdatedAtDesc(userId);
+        if (all.size() <= n) {
+            return all;
+        }
+        return all.subList(0, n);
+    }
+
+    public Map<String, Object> toListItem(CoachSessionEntity session) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("session_id", session.getSessionId());
+        m.put("problem_id", session.getProblemId());
+        m.put("topic", session.getTopic());
+        m.put("session_kind", session.getSessionKind());
+        m.put("phase", session.getPhase());
+        m.put("status", session.getStatus());
+        m.put("summary", session.getSummary());
+        m.put("title", listTitle(session));
+        m.put(
+                "updated_at",
+                session.getUpdatedAt() == null ? null : session.getUpdatedAt().toString());
+        m.put(
+                "created_at",
+                session.getCreatedAt() == null ? null : session.getCreatedAt().toString());
+        return m;
+    }
+
+    private static String listTitle(CoachSessionEntity session) {
+        if (session.getTopic() != null && !session.getTopic().isBlank()) {
+            return session.getTopic();
+        }
+        if (session.getProblemId() != null) {
+            return "题目 " + session.getProblemId();
+        }
+        if ("lobby".equals(session.getSessionKind())) {
+            return "大厅";
+        }
+        return session.getSessionId();
     }
 
     public CoachSessionEntity requireOwned(String sessionId, Long userId) {

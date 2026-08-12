@@ -18,8 +18,7 @@ docker-compose.yml     全栈编排
 docker-compose.infra.yml  仅基础设施
 ```
 
-布局原则见 [`docs/architecture/REPO_LAYOUT.md`](docs/architecture/REPO_LAYOUT.md)。  
-业务边界见 [`docs/architecture/BUSINESS_FLOW.md`](docs/architecture/BUSINESS_FLOW.md)（**业务进 Java，对话仅 Python**）。
+布局与边界见 [`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md)、[`docs/architecture/BUSINESS_FLOW.md`](docs/architecture/BUSINESS_FLOW.md)（**业务进 Java，对话仅 Python**）。
 
 ## 端口
 
@@ -88,5 +87,5 @@ docker compose --profile observability up -d   # 可观测性（较重）
 ## 更多
 
 - 架构总览：[`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md)
-- 项目评价与路线：[`docs/architecture/PROJECT_REVIEW.md`](docs/architecture/PROJECT_REVIEW.md)
-- 仓库布局：[`docs/architecture/REPO_LAYOUT.md`](docs/architecture/REPO_LAYOUT.md)
+- 短路线：[`docs/architecture/ROADMAP.md`](docs/architecture/ROADMAP.md)
+- 数据与缓存：[`docs/architecture/DATA_CACHE.md`](docs/architecture/DATA_CACHE.md)

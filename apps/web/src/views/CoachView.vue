@@ -21,9 +21,12 @@ const {
   pendingAsk,
   askDrafts,
   latestSolve,
+  sessions,
+  sessionsLoading,
 } = storeToRefs(coach);
 
 const chatEl = ref<HTMLElement | null>(null);
+const historyOpen = ref(false);
 
 const ready = computed(() => Boolean(sessionId.value) && !busy.value);
 const isApi = computed(() => graphMode.value === "api");
@@ -34,6 +37,34 @@ const primaryLabel = computed(() =>
 const endLabel = computed(() =>
   isApi.value ? "结束并诊断" : "结束本轮",
 );
+
+function formatSessionTime(raw?: string | null) {
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
+async function onPickSession(id: string) {
+  historyOpen.value = false;
+  if (!id || id === sessionId.value) return;
+  await coach.openSession(id);
+}
+
+async function onNewChat() {
+  historyOpen.value = false;
+  await coach.reopenLobby();
+}
+
+async function toggleHistory() {
+  historyOpen.value = !historyOpen.value;
+  if (historyOpen.value) await coach.loadSessions();
+}
 
 watch(
   messages,
@@ -63,6 +94,8 @@ function onKey(e: KeyboardEvent) {
   if (e.key !== "Enter") return;
   // IME 组字确认（选词/选英文候选）时不要发送
   if (e.isComposing || e.keyCode === 229) return;
+  // Shift+Enter 换行；Enter 发送
+  if (e.shiftKey) return;
   e.preventDefault();
   sendMessage();
 }
@@ -87,6 +120,48 @@ onMounted(() => {
 
   <main class="page-main narrow coach-layout">
     <div v-if="bannerVisible" class="banner" role="status">{{ banner }}</div>
+
+    <div class="history-bar">
+      <div class="history-pick">
+        <button
+          type="button"
+          class="btn-secondary history-toggle"
+          :disabled="busy"
+          :aria-expanded="historyOpen"
+          @click="toggleHistory"
+        >
+          历史会话
+          <span v-if="sessions.length" class="history-count">{{ sessions.length }}</span>
+        </button>
+        <div v-if="historyOpen" class="history-menu" role="listbox">
+          <p v-if="sessionsLoading" class="history-empty">加载中…</p>
+          <p v-else-if="!sessions.length" class="history-empty">暂无历史会话</p>
+          <button
+            v-for="s in sessions"
+            :key="s.session_id"
+            type="button"
+            class="history-item"
+            role="option"
+            :aria-selected="s.session_id === sessionId"
+            :class="{ active: s.session_id === sessionId }"
+            :disabled="busy"
+            @click="onPickSession(s.session_id)"
+          >
+            <span class="history-title">{{ s.title || s.session_id }}</span>
+            <span class="history-meta">{{ formatSessionTime(s.updated_at) }}</span>
+          </button>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="btn-secondary"
+        :disabled="busy"
+        title="开启全新大厅会话"
+        @click="onNewChat"
+      >
+        新对话
+      </button>
+    </div>
 
     <div ref="chatEl" class="chat" aria-live="polite">
       <p v-if="!messages.length" class="chat-empty">
@@ -257,9 +332,9 @@ onMounted(() => {
     </div>
 
     <div class="composer">
-      <input
+      <textarea
         v-model="inputText"
-        type="text"
+        rows="2"
         :placeholder="
           awaitingAskUser ? '补充回答，或点上方选项…' : '说说你的卡点…'
         "
@@ -270,17 +345,26 @@ onMounted(() => {
         v-if="!composerEnabled && !busy"
         type="button"
         class="btn-secondary"
-        @click="coach.reopenLobby()"
+        @click="onNewChat"
       >
-        开始新会话
+        新对话
       </button>
       <button
+        v-if="busy"
+        type="button"
+        class="btn-secondary"
+        @click="coach.stopGeneration()"
+      >
+        停止生成
+      </button>
+      <button
+        v-else
         type="button"
         class="btn-coach"
-        :disabled="!composerEnabled || busy"
+        :disabled="!composerEnabled"
         @click="sendMessage"
       >
-        {{ busy ? "发送中…" : primaryLabel }}
+        {{ primaryLabel }}
       </button>
     </div>
   </main>
@@ -291,6 +375,86 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   padding-bottom: 32px;
+}
+.history-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.history-pick {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.history-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.history-count {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--soft);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.history-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 4px;
+}
+.history-empty {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.history-item {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ink);
+  font: inherit;
+}
+.history-item:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.history-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.history-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.history-title {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
 }
 .banner {
   background: var(--warn-soft);
@@ -477,22 +641,26 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+  align-items: flex-end;
   position: sticky;
   bottom: 0;
   padding-top: 4px;
   background: linear-gradient(180deg, transparent, var(--bg) 28%);
 }
-.composer input {
+.composer textarea {
   flex: 1;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px 14px;
   background: #fff;
   font: inherit;
+  line-height: 1.45;
   min-height: 48px;
+  max-height: 160px;
+  resize: vertical;
   box-shadow: var(--shadow);
 }
-.composer input:focus {
+.composer textarea:focus {
   outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-color: var(--accent);
 }

@@ -1,9 +1,15 @@
 package com.codearena.business.learning.plan.service;
 
+import com.codearena.business.learning.list.domain.ProblemListItemEntity;
+import com.codearena.business.learning.list.domain.ProblemListItemRepository;
+import com.codearena.business.learning.plan.domain.GoalProblemBankEntity;
+import com.codearena.business.learning.plan.domain.GoalProblemBankRepository;
 import com.codearena.business.learning.plan.domain.PlanDailyTaskEntity;
 import com.codearena.business.learning.plan.domain.PlanDailyTaskRepository;
 import com.codearena.business.learning.plan.domain.StudyPlanEntity;
 import com.codearena.business.learning.plan.domain.StudyPlanRepository;
+import com.codearena.business.problem.domain.ProblemEntity;
+import com.codearena.business.problem.domain.ProblemRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
@@ -14,6 +20,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +34,9 @@ public class PlanQueryService {
 
     private final StudyPlanRepository studyPlanRepository;
     private final PlanDailyTaskRepository dailyTaskRepository;
+    private final ProblemRepository problemRepository;
+    private final ProblemListItemRepository listItemRepository;
+    private final GoalProblemBankRepository bankRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional(readOnly = true)
@@ -88,10 +99,78 @@ public class PlanQueryService {
         Optional<PlanDailyTaskEntity> task =
                 dailyTaskRepository.findFirstByPlanIdAndScheduledDate(plan.getId(), today);
         List<Integer> ids = task.map(t -> parseIds(t.getProblemIds())).orElse(List.of());
+        Integer dayNum = task.map(PlanDailyTaskEntity::getDayNum).orElse(null);
+        String reason = buildReason(plan, dayNum);
+
+        Map<Integer, ProblemEntity> byProblem = ids.isEmpty()
+                ? Map.of()
+                : problemRepository.findAll().stream()
+                        .filter(p -> p.getProblemId() != null && ids.contains(p.getProblemId()))
+                        .collect(Collectors.toMap(ProblemEntity::getProblemId, Function.identity(), (a, b) -> a));
+
+        Map<Integer, ProblemListItemEntity> byListItem = Map.of();
+        if (plan.getListId() != null && !ids.isEmpty()) {
+            byListItem = listItemRepository.findByListIdOrderBySortOrderAsc(plan.getListId()).stream()
+                    .filter(it -> it.getProblemId() != null && ids.contains(it.getProblemId()))
+                    .collect(Collectors.toMap(
+                            ProblemListItemEntity::getProblemId, Function.identity(), (a, b) -> a));
+        }
+
+        Map<Integer, GoalProblemBankEntity> byBank = Map.of();
+        if (!ids.isEmpty()) {
+            byBank = bankRepository.findAll().stream()
+                    .filter(b -> b.getProblemId() != null && ids.contains(b.getProblemId()))
+                    .collect(Collectors.toMap(
+                            GoalProblemBankEntity::getProblemId, Function.identity(), (a, b) -> a));
+        }
+
         List<Map<String, Object>> items = new ArrayList<>();
         for (Integer pid : ids) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("problem_id", pid);
+            item.put("id", pid);
+
+            ProblemEntity p = byProblem.get(pid);
+            ProblemListItemEntity li = byListItem.get(pid);
+            GoalProblemBankEntity bank = byBank.get(pid);
+
+            String title = null;
+            String difficulty = null;
+            String slug = null;
+            if (p != null) {
+                title = p.getTitle();
+                difficulty = p.getDifficulty();
+                slug = p.getSlug();
+            }
+            if ((title == null || title.isBlank()) && li != null) {
+                title = li.getTitle();
+                if (difficulty == null || difficulty.isBlank()) {
+                    difficulty = li.getDifficulty();
+                }
+                if (slug == null || slug.isBlank()) {
+                    slug = li.getSlug();
+                }
+            }
+            if ((title == null || title.isBlank()) && bank != null) {
+                title = bank.getTitle();
+                if (difficulty == null || difficulty.isBlank()) {
+                    difficulty = bank.getDifficulty();
+                }
+                if (slug == null || slug.isBlank()) {
+                    slug = bank.getSlug();
+                }
+            }
+            if (title == null || title.isBlank()) {
+                title = "LC " + pid;
+            }
+            if (difficulty == null || difficulty.isBlank()) {
+                difficulty = "Medium";
+            }
+
+            item.put("title", title);
+            item.put("difficulty", difficulty);
+            item.put("slug", slug);
+            item.put("reason", reason);
             items.add(item);
         }
         data.put("ok", true);
@@ -101,7 +180,7 @@ public class PlanQueryService {
         data.put("title", plan.getTitle());
         data.put("list_id", plan.getListId());
         data.put("scheduled_date", today.toString());
-        data.put("day_num", task.map(PlanDailyTaskEntity::getDayNum).orElse(null));
+        data.put("day_num", dayNum);
         data.put("status", task.map(PlanDailyTaskEntity::getStatus).orElse(null));
         data.put("items", items);
         data.put("count", items.size());
@@ -109,6 +188,16 @@ public class PlanQueryService {
             data.put("note", "今日无排期任务（可能未到开始日、已结束或未排日程）");
         }
         return data;
+    }
+
+    private static String buildReason(StudyPlanEntity plan, Integer dayNum) {
+        String planTitle = plan.getTitle() == null || plan.getTitle().isBlank()
+                ? "刷题计划"
+                : plan.getTitle().trim();
+        if (dayNum != null && dayNum > 0) {
+            return "今日计划 · 第 " + dayNum + " 天（" + planTitle + "）";
+        }
+        return "今日计划任务（" + planTitle + "）";
     }
 
     private List<Integer> parseIds(String json) {

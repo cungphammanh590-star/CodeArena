@@ -14,6 +14,9 @@ CHOICE_BACK = "先回到刷题"
 CHOICE_PLAN_GOOGLE = "请为我生成 Google 面试备考、30天的刷题计划"
 CHOICE_PLAN_DP = "请为我生成动态规划专题、14天的刷题计划"
 CHOICE_PLAN_HOT100 = "请为我按 Hot100 题单生成 21 天打卡计划"
+CHOICE_TODAY_TASKS = "请展示今日计划任务"
+CHOICE_START_FIRST = "绑定今日第一题开始跟练"
+CHOICE_ADJUST_PLAN = "我想调整计划天数或每日题量"
 
 
 def build_confirm_payload(
@@ -37,6 +40,16 @@ def build_confirm_payload(
             {"id": "back", "label": "回到刷题", "text": CHOICE_BACK},
         ]
         return {"prompt": prompt, "choices": choices, "reason": "injection"}
+
+    if phase == "plan_active" and intent in {"plan_status", "status_review", "clarify"}:
+        prompt = "计划相关，你想先做什么？"
+        choices = [
+            {"id": "today", "label": "看今日任务", "text": CHOICE_TODAY_TASKS},
+            {"id": "start", "label": "开刷第一题", "text": CHOICE_START_FIRST},
+            {"id": "adjust", "label": "调整计划", "text": CHOICE_ADJUST_PLAN},
+            {"id": "status", "label": "今日进度", "text": CHOICE_STATUS},
+        ]
+        return {"prompt": prompt, "choices": choices, "reason": "plan_followup"}
 
     if intent == "plan_create" or phase == "plan_active":
         prompt = "想按哪个目标生成刷题计划？选一个（或直接说公司/专题 + 天数）："

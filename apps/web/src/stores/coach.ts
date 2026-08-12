@@ -58,6 +58,17 @@ export interface ChatMessage {
   codeResult?: CodeResultView;
 }
 
+export interface CoachSessionItem {
+  session_id: string;
+  title: string;
+  problem_id?: number | null;
+  topic?: string | null;
+  session_kind?: string;
+  status?: string;
+  summary?: string;
+  updated_at?: string | null;
+}
+
 let msgSeq = 0;
 
 const ACTION_LABELS: Record<string, string> = {
@@ -70,6 +81,36 @@ const ACTION_LABELS: Record<string, string> = {
   review: "今日复习",
   optimize: "优化分析",
 };
+
+const SESSION_STORAGE_KEY = "leetmate.coach.last_session_id";
+
+function rememberSessionId(id: string) {
+  const sid = id.trim();
+  if (!sid || typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, sid);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function forgetSessionId() {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readRememberedSessionId(): string {
+  if (typeof sessionStorage === "undefined") return "";
+  try {
+    return String(sessionStorage.getItem(SESSION_STORAGE_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
 
 export const useCoachStore = defineStore("coach", () => {
   const sessionId = ref("");
@@ -85,6 +126,29 @@ export const useCoachStore = defineStore("coach", () => {
   const pendingAsk = ref<AskUserPayload | null>(null);
   const askDrafts = ref<Record<string, string>>({});
   const latestSolve = ref<SolveProgress | null>(null);
+  const sessions = ref<CoachSessionItem[]>([]);
+  const sessionsLoading = ref(false);
+
+  let streamAbort: AbortController | null = null;
+  let unloadGuardAttached = false;
+
+  function onBeforeUnload(e: BeforeUnloadEvent) {
+    if (!busy.value) return;
+    e.preventDefault();
+    e.returnValue = "";
+  }
+
+  function attachUnloadGuard() {
+    if (unloadGuardAttached || typeof window === "undefined") return;
+    window.addEventListener("beforeunload", onBeforeUnload);
+    unloadGuardAttached = true;
+  }
+
+  function detachUnloadGuard() {
+    if (!unloadGuardAttached || typeof window === "undefined") return;
+    window.removeEventListener("beforeunload", onBeforeUnload);
+    unloadGuardAttached = false;
+  }
 
   function showBanner(text: string) {
     banner.value = text;
@@ -126,6 +190,99 @@ export const useCoachStore = defineStore("coach", () => {
 
   function disableComposer() {
     composerEnabled.value = false;
+    forgetSessionId();
+  }
+
+  function clearChatUi() {
+    messages.value = [];
+    awaitingAskUser.value = false;
+    pendingAsk.value = null;
+    askDrafts.value = {};
+    latestSolve.value = null;
+    exitOffered.value = false;
+    inputText.value = "";
+  }
+
+  function applyTurns(turns: unknown) {
+    if (!Array.isArray(turns) || turns.length === 0) return false;
+    clearChatUi();
+    for (const raw of turns) {
+      if (!raw || typeof raw !== "object") continue;
+      const t = raw as Record<string, unknown>;
+      const roleRaw = String(t.role || "").toLowerCase();
+      const content = String(t.content || "").trim();
+      if (!content) continue;
+      let role: ChatMessage["role"] = "system";
+      if (roleRaw === "user" || roleRaw === "human") role = "user";
+      else if (
+        roleRaw === "assistant" ||
+        roleRaw === "coach" ||
+        roleRaw === "ai" ||
+        roleRaw === "model"
+      ) {
+        role = "coach";
+      }
+      addMsg(content, role);
+    }
+    return messages.value.length > 0;
+  }
+
+  function applySessionPayload(
+    data: Record<string, unknown>,
+    opts?: { fallbackOpening?: string },
+  ) {
+    sessionId.value = String(data.session_id || "");
+    if (sessionId.value) rememberSessionId(sessionId.value);
+    const hasTurns = applyTurns(data.turns);
+    if (!hasTurns) {
+      clearChatUi();
+      const opening =
+        opts?.fallbackOpening ||
+        String(data.opening || "").trim() ||
+        "会话已就绪，直接输入即可。";
+      if (opening) addMsg(opening, "coach");
+    }
+    enableComposer();
+    hideBanner();
+  }
+
+  async function loadSessions() {
+    sessionsLoading.value = true;
+    try {
+      const res = await fetch("/api/coach/sessions?limit=20", {
+        headers: userHeaders(),
+      });
+      if (!res.ok) {
+        sessions.value = [];
+        return;
+      }
+      const data = await res.json();
+      sessions.value = Array.isArray(data.sessions) ? data.sessions : [];
+    } catch {
+      sessions.value = [];
+    } finally {
+      sessionsLoading.value = false;
+    }
+  }
+
+  async function openSession(id: string) {
+    const sid = id.trim();
+    if (!sid || busy.value) return;
+    showBanner("正在打开会话…");
+    try {
+      const res = await fetch(
+        `/api/coach/session?session_id=${encodeURIComponent(sid)}`,
+        { headers: userHeaders() },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(toUserMessage(data.message, "无法打开该会话"));
+      }
+      applySessionPayload(data as Record<string, unknown>);
+      await loadSessions();
+    } catch (err) {
+      showErrorBanner(err, "无法打开该会话");
+    }
   }
 
   async function loadCachedSession(
@@ -148,15 +305,17 @@ export const useCoachStore = defineStore("coach", () => {
     submissionId: string,
     pid: string | null,
     mode: string,
+    opts?: { forceNew?: boolean },
   ) {
     if (preparePromise) return preparePromise;
     preparePromise = (async () => {
-      showBanner("正在创建陪练会话…");
+      showBanner(opts?.forceNew ? "正在开启新会话…" : "正在准备陪练…");
       const body: Record<string, unknown> = {
         submission_id: submissionId || "",
         problem_id: pid ? Number(pid) : null,
       };
       if (mode) body.mode = mode;
+      if (opts?.forceNew) body.force_new = true;
       const res = await fetch("/api/coach/prepare", {
         method: "POST",
         headers: userHeaders({ "Content-Type": "application/json" }),
@@ -175,12 +334,10 @@ export const useCoachStore = defineStore("coach", () => {
     }
   }
 
-  async function startWithMode(mode: string, actionParam = "") {
-    const data = await prepare("", null, mode);
-    sessionId.value = String(data.session_id || "");
-    addMsg(String(data.opening || ""), "coach");
-    hideBanner();
-    enableComposer();
+  async function startWithMode(mode: string, actionParam = "", forceNew = false) {
+    const data = await prepare("", null, mode, { forceNew });
+    applySessionPayload(data);
+    await loadSessions();
     const bootAction = actionParam || mode;
     if (
       bootAction === "daily_review" ||
@@ -197,36 +354,29 @@ export const useCoachStore = defineStore("coach", () => {
   ) {
     let data = await loadCachedSession(submissionId, pid);
     if (data && data.session_id) {
-      sessionId.value = String(data.session_id);
-      addMsg(String(data.opening || ""), "coach");
-      hideBanner();
-      enableComposer();
+      applySessionPayload(data as Record<string, unknown>);
+      await loadSessions();
       return;
     }
     data = await prepare(submissionId, pid, "");
-    sessionId.value = String(data.session_id || "");
-    addMsg(String(data.opening || ""), "coach");
+    applySessionPayload(data as Record<string, unknown>);
     if (data.fallback_used) {
       showBanner(
         `指定提交未找到，已使用本题最近提交 ${data.resolved_submission_id} 启动陪练。`,
       );
-    } else if (data.opening_source === "template") {
-      showBanner("会话已就绪，发送消息后开始对话。");
-    } else {
-      hideBanner();
     }
-    enableComposer();
+    await loadSessions();
   }
 
   async function startWithProblem(pid: string, openingHint?: string) {
     const data = await prepare("", pid, "");
-    sessionId.value = String(data.session_id || "");
-    const opening =
-      openingHint ||
-      String(data.opening || "") ||
-      `已就题目 ${pid} 开启陪练，可以直接提问。`;
-    addMsg(opening, "coach");
-    enableComposer();
+    applySessionPayload(data, {
+      fallbackOpening:
+        openingHint ||
+        String(data.opening || "") ||
+        `已就题目 ${pid} 开启陪练，可以直接提问。`,
+    });
+    await loadSessions();
   }
 
   async function loadHint(pid: string) {
@@ -278,6 +428,7 @@ export const useCoachStore = defineStore("coach", () => {
     if (!hasAction && !hasText && !hasAnswers) return;
 
     busy.value = true;
+    attachUnloadGuard();
     clearChoices();
 
     if (hasAnswers) {
@@ -289,6 +440,10 @@ export const useCoachStore = defineStore("coach", () => {
     }
     inputText.value = "";
     const coachMsg = addMsg("", "coach");
+    let finished = false;
+    let cancelled = false;
+    const ac = new AbortController();
+    streamAbort = ac;
 
     try {
       const res = await fetch("/api/coach/stream", {
@@ -303,6 +458,7 @@ export const useCoachStore = defineStore("coach", () => {
           action: action || "",
           answers: hasAnswers ? answers : undefined,
         }),
+        signal: ac.signal,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -314,7 +470,6 @@ export const useCoachStore = defineStore("coach", () => {
         }
         return;
       }
-      let finished = false;
       await readSse(res, (event, data) => {
         if (event === "ready" || data.type === "ready") {
           if (
@@ -453,9 +608,10 @@ export const useCoachStore = defineStore("coach", () => {
           }
         } else if (event === "done" || data.type === "done") {
           finished = true;
+          if (data.cancelled) cancelled = true;
           if (data.awaiting === "ask_user") {
             awaitingAskUser.value = true;
-          } else {
+          } else if (!data.cancelled) {
             awaitingAskUser.value = false;
             pendingAsk.value = null;
           }
@@ -463,20 +619,40 @@ export const useCoachStore = defineStore("coach", () => {
             disableComposer();
             sessionId.value = "";
             showBanner("本轮已结束。重新打开陪练可开始新会话。");
+          } else if (data.cancelled) {
+            showBanner("已停止生成");
           }
         }
       });
       const m = messages.value.find((x) => x.id === coachMsg.id);
       if (!m?.text && !m?.askUser && !m?.solveProgress && !m?.codeResult) {
-        if (!finished) updateMsg(coachMsg.id, "（无回复）");
-        else removeMsg(coachMsg.id);
+        removeMsg(coachMsg.id);
       }
     } catch (err) {
-      removeMsg(coachMsg.id);
-      showErrorBanner(err, "发送失败，请稍后再试");
+      if (ac.signal.aborted) {
+        cancelled = true;
+        const m = messages.value.find((x) => x.id === coachMsg.id);
+        if (!m?.text && !m?.askUser && !m?.solveProgress && !m?.codeResult) {
+          removeMsg(coachMsg.id);
+        }
+        showBanner("已停止生成");
+      } else {
+        removeMsg(coachMsg.id);
+        showErrorBanner(err, "发送失败，请稍后再试");
+      }
     } finally {
+      if (streamAbort === ac) streamAbort = null;
       busy.value = false;
+      detachUnloadGuard();
+      if (finished && !cancelled) void loadSessions();
     }
+  }
+
+  /** 停止当前流式生成（断开 SSE；后端会修 checkpoint） */
+  function stopGeneration() {
+    if (!busy.value) return;
+    streamAbort?.abort();
+    streamAbort = null;
   }
 
   /** 点击确认选项：把固定文案嵌入输入并作为用户消息发出 */
@@ -544,9 +720,7 @@ export const useCoachStore = defineStore("coach", () => {
         showBanner("学习资料仍在准备中，陪练可以先用");
       }
       if (params.session) {
-        sessionId.value = params.session;
-        addMsg(`继续会话 ${params.session}（直接输入即可）`, "coach");
-        enableComposer();
+        await openSession(params.session);
         return;
       }
       if (params.submission) {
@@ -557,19 +731,30 @@ export const useCoachStore = defineStore("coach", () => {
         await loadHint(params.problemId);
         return;
       }
-      // 无参进入：大厅会话（可生成计划 / 闲聊）
+      // 无参进入：优先恢复刷新前会话，否则大厅
+      const remembered = readRememberedSessionId();
+      if (remembered) {
+        await openSession(remembered);
+        if (sessionId.value === remembered) {
+          void loadSessions();
+          return;
+        }
+        forgetSessionId();
+      }
       await startWithMode("lobby");
-      showBanner("大厅模式：可聊刷题计划，或从题目页带题号进入跟练。");
+      void loadSessions();
     } catch {
       showBanner("暂时无法连接服务，请稍后再试");
     }
   }
 
   async function reopenLobby() {
+    stopGeneration();
     hideBanner();
-    messages.value = [];
+    clearChatUi();
     sessionId.value = "";
-    await startWithMode("lobby");
+    forgetSessionId();
+    await startWithMode("lobby", "", true);
   }
 
   return {
@@ -586,17 +771,22 @@ export const useCoachStore = defineStore("coach", () => {
     pendingAsk,
     askDrafts,
     latestSolve,
+    sessions,
+    sessionsLoading,
     showBanner,
     hideBanner,
     addMsg,
     enableComposer,
     disableComposer,
     sendPayload,
+    stopGeneration,
     sendChoice,
     setAskDraft,
     pickAskOption,
     submitAskUser,
     init,
     reopenLobby,
+    loadSessions,
+    openSession,
   };
 });
