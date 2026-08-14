@@ -66,7 +66,7 @@ docker-data/
 .cursor/
 .githooks/
 openspec/
-package.json
+/package.json
 .build-venv/
 log/
 
@@ -74,7 +74,7 @@ log/
 .ignore/
 
 # 历史测试目录忽略（保留）
-tests/
+/tests/
 
 # Helm / secrets
 **/charts/*.tgz
