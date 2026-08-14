@@ -195,7 +195,8 @@ START → hydrate → classify → refuse | offer | confirm | **plan_resolve** �
 | L2 | `coach_sessions` + `coach_turns` | hydrate 读；**persist 每回合写** | Java tools |
 | L3 | `user_coach_memories` | hydrate / `remember` | Java tools |
 
-口诀：**短期靠图状态，中期靠会话表，长期靠用户记忆；库只听 Java。** 不做向量 RAG（暂缓）。
+口诀：**短期靠图状态，中期靠会话表，长期靠用户记忆；库只听 Java。**
+用户投递的学习材料走独立 **Knowledge Base**（PG + Qdrant，工具 `search_user_knowledge`），与 L3 `remember` 分立。见 [KNOWLEDGE_BASE.md](./KNOWLEDGE_BASE.md)。
 
 ---
 

@@ -5,6 +5,7 @@ import com.codearena.business.user.domain.UserEntity;
 import com.codearena.business.user.domain.UserRepository;
 import com.codearena.business.user.service.CurrentUserService;
 import com.codearena.business.user.service.UserService;
+import com.codearena.business.knowledge.service.KnowledgeService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotBlank;
 import java.util.LinkedHashMap;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/api/users")
@@ -33,6 +35,23 @@ public class UserController {
     private final UserService userService;
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
+    private final KnowledgeService knowledgeService;
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/me")
+    @Transactional
+    public ResponseEntity<?> deleteMe(HttpServletRequest request, @RequestBody Map<String,Object> body) {
+        UserEntity user = currentUserService.requireSession(request);
+        String username = str(body, "username");
+        String confirm = str(body, "confirm");
+        if (!user.getUsername().equals(username) || !"DELETE".equals(confirm)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error", "message", "请填写当前用户名和 DELETE"));
+        }
+        knowledgeService.purgeExternalAssets(user.getId());
+        userRepository.delete(user);
+        userRepository.flush();
+        return ResponseEntity.ok(Map.of("status", "ok", "deleted", true, "cleanup", "complete"));
+    }
 
     @GetMapping("/health")
     public Map<String, Object> health() {

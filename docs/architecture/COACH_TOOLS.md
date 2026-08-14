@@ -23,6 +23,9 @@
 | `recall_memories` | READ | **Java** | 跨会话长期记忆 |
 | `remember` | WRITE | **Java** | 写入长期记忆 |
 | `forget_memory` | WRITE | **Java** | 软删长期记忆 |
+| `search_user_knowledge` | READ | **Java** | 用户私有知识库语义检索（带来源） |
+| `get_knowledge_point` | READ | **Java** | 按 id 读取知识点详情 |
+| `get_kp_review_due` | READ | **Java** | 知识点闪卡今日到期 |
 | `get_last_advice` | READ | **Python 本地** | 仅读本会话消息，无 DB |
 
 内部（不进 LLM TOOL_SPECS）：`append_coach_turn`、`sync_session_state`、`get_session_context` — hydrate / stream 落轮次用。

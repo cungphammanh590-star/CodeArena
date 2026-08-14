@@ -8,6 +8,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -198,7 +199,7 @@ public class UserLlmSettingsService {
     }
 
     private UserLlmSettingsEntity ensure(Long userId) {
-        return repository
+        UserLlmSettingsEntity row = repository
                 .findById(userId)
                 .orElseGet(() -> {
                     UserLlmSettingsEntity created = new UserLlmSettingsEntity();
@@ -207,6 +208,12 @@ public class UserLlmSettingsService {
                     created.setCoachModel("qwen2.5:7b-instruct-q4_K_M");
                     return repository.save(created);
                 });
+        if (row.getApiKeyEnc() != null && !row.getApiKeyEnc().isBlank()
+                && !row.getApiKeyEnc().startsWith(ENC_PREFIX) && secretBytes() != null) {
+            row.setApiKeyEnc(encrypt(row.getApiKeyEnc()));
+            row = repository.save(row);
+        }
+        return row;
     }
 
     private Map<String, Object> toPublicLlm(UserLlmSettingsEntity row) {
@@ -220,7 +227,7 @@ public class UserLlmSettingsService {
         return llm;
     }
 
-    private String encrypt(String plain) {
+    String encrypt(String plain) {
         if (plain == null || plain.isBlank()) {
             return "";
         }
@@ -243,7 +250,7 @@ public class UserLlmSettingsService {
         }
     }
 
-    private String decrypt(String stored) {
+    String decrypt(String stored) {
         if (stored == null || stored.isBlank()) {
             return "";
         }
@@ -272,12 +279,12 @@ public class UserLlmSettingsService {
         if (keySecret == null || keySecret.isBlank()) {
             return null;
         }
-        byte[] raw = keySecret.getBytes(StandardCharsets.UTF_8);
-        byte[] out = new byte[16];
-        for (int i = 0; i < out.length; i++) {
-            out[i] = raw[i % raw.length];
+        try {
+            return MessageDigest.getInstance("SHA-256")
+                    .digest(keySecret.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
         }
-        return out;
     }
 
     private static String mask(String key) {

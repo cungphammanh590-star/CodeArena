@@ -256,6 +256,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "get_bridge_status") {
+    (async () => {
+      const cfg = await getConfig();
+      const stored = await chrome.storage.local.get([PENDING_SUBMISSIONS_KEY]);
+      const pending = Array.isArray(stored[PENDING_SUBMISSIONS_KEY])
+        ? stored[PENDING_SUBMISSIONS_KEY].length
+        : 0;
+      sendResponse({ ok: true, loggedIn: Boolean(cfg.accessToken), pendingCount: pending });
+    })();
+    return true;
+  }
+
   if (message.type === "get_current_problem") {
     chrome.storage.local
       .get(["currentProblem"])

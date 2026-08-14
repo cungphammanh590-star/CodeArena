@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
   threads:
     virtual:
       enabled: true
@@ -140,3 +146,5 @@ codearena:
     default-per-minute: ${CODEARENA_RATE_LIMIT_DEFAULT:60}
     stream-per-minute: ${CODEARENA_RATE_LIMIT_STREAM:20}
     submit-per-minute: ${CODEARENA_RATE_LIMIT_SUBMIT:20}
+    auth-per-minute: ${CODEARENA_RATE_LIMIT_AUTH:10}
+    export-per-minute: ${CODEARENA_RATE_LIMIT_EXPORT:5}

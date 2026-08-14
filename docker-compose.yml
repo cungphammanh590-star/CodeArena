@@ -45,6 +45,21 @@ services:
       timeout: 3s
       retries: 5
 
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: codearena-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - codearena_qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   nacos:
     image: nacos/nacos-server:v2.3.2
     container_name: codearena-nacos
@@ -122,11 +137,22 @@ services:
       CODEARENA_INTERNAL_TOKEN: ${CODEARENA_INTERNAL_TOKEN:-codearena-internal-dev}
       CODEARENA_LLM_KEY_SECRET: ${CODEARENA_LLM_KEY_SECRET:-}
       CODEARENA_SQL_LOG_LEVEL: ${CODEARENA_SQL_LOG_LEVEL:-INFO}
+      CODEARENA_KNOWLEDGE_ENABLED: ${CODEARENA_KNOWLEDGE_ENABLED:-true}
+      CODEARENA_QDRANT_URL: ${CODEARENA_QDRANT_URL:-http://qdrant:6333}
+      CODEARENA_QDRANT_COLLECTION: ${CODEARENA_QDRANT_COLLECTION:-leetmate_user_kb}
+      CODEARENA_EMBEDDING_PROVIDER: ${CODEARENA_EMBEDDING_PROVIDER:-mock}
+      CODEARENA_EMBEDDING_DIM: ${CODEARENA_EMBEDDING_DIM:-384}
+      CODEARENA_EMBEDDING_MODEL: ${CODEARENA_EMBEDDING_MODEL:-mock-hash-v1}
+      CODEARENA_EMBEDDING_VERSION: ${CODEARENA_EMBEDDING_VERSION:-1}
+      CODEARENA_EMBEDDING_HTTP_URL: ${CODEARENA_EMBEDDING_HTTP_URL:-}
+      CODEARENA_EMBEDDING_HTTP_API_KEY: ${CODEARENA_EMBEDDING_HTTP_API_KEY:-}
+      CODEARENA_KNOWLEDGE_STORAGE_DIR: ${CODEARENA_KNOWLEDGE_STORAGE_DIR:-/data/knowledge}
       JAVA_TOOL_OPTIONS: ${BUSINESS_JAVA_TOOL_OPTIONS:-}
       SW_AGENT_NAME: business-service
       SW_AGENT_COLLECTOR: skywalking-oap:11800
     volumes:
       - ./deploy/observability/skywalking/agent:/skywalking:ro
+      - codearena_knowledge_data:/data/knowledge
     # 不向宿主机映射端口：仅 Docker 网络内可达，经 Gateway/Nginx 访问。
     # 调试直连时可临时加 ports: ["8090:8090"]，或用本机 make business。
     expose:
@@ -135,6 +161,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8090/actuator/health | grep -q UP || exit 1"]
@@ -285,6 +313,8 @@ services:
 volumes:
   codearena_pg_data:
   codearena_redis_data:
+  codearena_qdrant_data:
+  codearena_knowledge_data:
   codearena_nacos_data:
   codearena_prometheus_data:
   codearena_grafana_data:

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 
 from app.config import Settings, get_settings
 from app.sandbox.backends import RestrictedSubprocessBackend, SandboxBackend
 from app.sandbox.quota import QuotaExceeded, UserExecQuota
 from app.sandbox.spec import ExecRequest, ExecResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,8 +41,7 @@ class SandboxSettings:
 def build_backend(settings: SandboxSettings) -> SandboxBackend | None:
     if settings.backend in {"", "off", "none", "disabled"}:
         return None
-    # P0: only subprocess; bwrap/sidecar later
-    return RestrictedSubprocessBackend()
+    return RestrictedSubprocessBackend(isolate_network=settings.backend in {"unshare", "isolated"})
 
 
 class SandboxService:
@@ -80,7 +82,9 @@ class SandboxService:
         except QuotaExceeded as exc:
             return ExecResult(error=str(exc))
         with lease:
-            return self._backend.exec(request)
+            result = self._backend.exec(request)
+            logger.info("sandbox_run user=%s duration_ms=%s exit_code=%s timed_out=%s ok=%s", user_id or "anon", result.duration_ms, result.exit_code, result.timed_out, result.ok)
+            return result
 
 
 def _safe_segment(value: str) -> str:

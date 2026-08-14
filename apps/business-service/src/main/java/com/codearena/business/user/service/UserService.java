@@ -126,9 +126,14 @@ public class UserService implements UserLookup {
             profileView.put("bio", profile.getBio());
             profileView.put("locale", profile.getLocale());
             profileView.put("timezone", profile.getTimezone());
+            profileView.put("onboarding_completed", Boolean.TRUE.equals(profile.getOnboardingCompleted()));
+            profileView.put("learning_goal", profile.getLearningGoal());
+            profileView.put("daily_minutes", profile.getDailyMinutes());
+            profileView.put("learning_start_mode", profile.getLearningStartMode());
         } else {
             profileView.put("locale", "zh-CN");
             profileView.put("timezone", "Asia/Shanghai");
+            profileView.put("onboarding_completed", false);
         }
         body.put("profile", profileView);
         return body;

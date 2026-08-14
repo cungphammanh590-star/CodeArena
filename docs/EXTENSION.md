@@ -6,8 +6,7 @@
 leetcode.cn → 扩展 → Gateway（内置 API）→ Java /（stream）Python
 ```
 
-**重要：** 力扣提交不会自动进库，必须由扩展在 **已登录** 状态下调用 `POST /submit`。  
-只登录 Web 仪表盘、扩展未登录 → 提交同步会失败（弹窗会显示「未登录」或角标 `!`）。
+**重要：** 力扣提交由扩展在 **已登录** 状态下调用 `POST /submit`。用户登录 Web 后，已安装扩展会自动取得同一登录态；不需要再次填写账号或服务地址。
 
 ## 用户可见能力
 
@@ -18,7 +17,7 @@ leetcode.cn → 扩展 → Gateway（内置 API）→ Java /（stream）Python
 ## 鉴权与 Web 同步
 
 - 鉴权：`POST /api/auth/login|register`，请求头 `Authorization: Bearer <JWT>`
-- Web（`5173`）登录后，`web-bridge` 会把页面 `localStorage` 中的 JWT 写入扩展
+- Web 登录后，`web-bridge` 会把页面 `localStorage` 中的 JWT 写入扩展，并支持 onboarding 单次检测安装、登录和待补传状态；不做定时轮询
 - 扩展登录成功也会用 `?ext_token=` 打开 Web，实现双向对齐
 
 ## 开发者注意

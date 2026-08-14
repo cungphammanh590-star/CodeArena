@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import resource
+import shutil
 import subprocess
 import time
 from typing import Protocol
@@ -17,7 +19,10 @@ class SandboxBackend(Protocol):
 class RestrictedSubprocessBackend:
     """Plain subprocess with scrubbed env and confined cwd (APPLICATION isolation)."""
 
-    _SAFE_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
+    _SAFE_ENV_KEYS = ("PATH", "LANG", "LC_ALL", "TMPDIR")
+
+    def __init__(self, *, isolate_network: bool = False) -> None:
+        self._isolate_network = isolate_network
 
     def exec(self, request: ExecRequest) -> ExecResult:
         env = {k: os.environ[k] for k in self._SAFE_ENV_KEYS if k in os.environ}
@@ -28,14 +33,22 @@ class RestrictedSubprocessBackend:
         started = time.monotonic()
         try:
             if request.argv:
+                argv = list(request.argv)
+                if self._isolate_network:
+                    unshare = shutil.which("unshare")
+                    if not unshare:
+                        return ExecResult(error="network-isolated sandbox unavailable")
+                    argv = [unshare, "--net", "--", *argv]
                 proc = subprocess.run(
-                    list(request.argv),
+                    argv,
                     capture_output=True,
                     text=True,
                     cwd=cwd,
                     env=env,
                     timeout=timeout,
                     check=False,
+                    start_new_session=True,
+                    preexec_fn=_limit_process(request.limits),
                 )
             else:
                 proc = subprocess.run(
@@ -47,6 +60,8 @@ class RestrictedSubprocessBackend:
                     env=env,
                     timeout=timeout,
                     check=False,
+                    start_new_session=True,
+                    preexec_fn=_limit_process(request.limits),
                 )
         except subprocess.TimeoutExpired as exc:
             out = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
@@ -69,6 +84,29 @@ class RestrictedSubprocessBackend:
             exit_code=int(proc.returncode if proc.returncode is not None else 0),
             duration_ms=int((time.monotonic() - started) * 1000),
         )
+
+
+def _limit_process(limits):
+    def apply() -> None:
+        memory = max(32, int(limits.memory_mb)) * 1024 * 1024
+        cpu = max(1, int(limits.cpu_seconds))
+        _set_soft_limit(resource.RLIMIT_AS, memory)
+        _set_soft_limit(resource.RLIMIT_CPU, cpu)
+        _set_soft_limit(resource.RLIMIT_NPROC, 32)
+        _set_soft_limit(resource.RLIMIT_FSIZE, 8 * 1024 * 1024)
+    return apply
+
+
+def _set_soft_limit(kind: int, requested: int) -> None:
+    """Lower a supported soft limit without trying to raise the host hard limit."""
+    try:
+        _, hard = resource.getrlimit(kind)
+        soft = requested if hard == resource.RLIM_INFINITY else min(requested, hard)
+        resource.setrlimit(kind, (soft, hard))
+    except (OSError, ValueError):
+        # Some limits (notably NPROC/AS on macOS) are unavailable to an
+        # unprivileged child. Other supported limits remain active.
+        return
 
 
 __all__ = ["RestrictedSubprocessBackend", "SandboxBackend"]

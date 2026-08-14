@@ -13,7 +13,7 @@ export PATH := $(JAVA_HOME)/bin:/opt/homebrew/bin:$(PATH)
 
 help:
 	@echo "Targets:"
-	@echo "  infra-up     Start postgres + redis-stack + nacos only"
+	@echo "  infra-up     Start postgres + redis-stack + nacos + qdrant"
 	@echo "  redis-stack  Start local brew redis-stack on :6380 (RedisJSON)"
 	@echo "  up           Start full stack (infra + apps) via Docker"
 	@echo "  down         Stop compose stack"

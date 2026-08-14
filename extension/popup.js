@@ -200,7 +200,7 @@ async function refresh() {
 
 dashboardBtn.addEventListener("click", async () => {
   if (!ready || !loggedIn) return;
-  await chrome.tabs.create({ url: `${webBase}/` });
+  await chrome.tabs.create({ url: `${webBase}/dashboard` });
 });
 
 coachBtn.addEventListener("click", async () => {

@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     checkpoint_ttl_seconds: int = 604800  # 7d
 
     # Code sandbox (P0)
-    sandbox_backend: str = "subprocess"  # subprocess | off
+    sandbox_backend: str = "subprocess"  # subprocess | unshare (Linux no-network) | off
     sandbox_timeout_s: int = 10
     sandbox_memory_mb: int = 256
     sandbox_max_output_chars: int = 8000

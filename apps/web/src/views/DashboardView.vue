@@ -8,6 +8,7 @@ import Pager from "@/components/Pager.vue";
 import WeekBars from "@/components/WeekBars.vue";
 import { useStatsStore } from "@/stores/stats";
 import { useLearningStore } from "@/stores/learning";
+import { api } from "@/api/client";
 import {
   chinaTodayStr,
   shiftDate,
@@ -27,7 +28,6 @@ const {
   todaySubmissions,
   todayAccepted,
   streakDays,
-  acceptanceRate,
   last7,
   todayWrong,
   recent,
@@ -43,6 +43,7 @@ const problemsQuery = ref("");
 const problemsPage = ref(1);
 const wrongPage = ref(1);
 const refreshing = ref(false);
+const latestNex = ref<Record<string, any> | null>(null);
 
 const filteredProblems = computed(() => {
   const raw = problemsQuery.value.trim().toLowerCase();
@@ -96,6 +97,7 @@ async function onRefresh() {
     await Promise.all([
       stats.refresh({ reloadProblems: true }),
       learning.load(),
+      api.get("/learning/archive").then(({ data }) => { latestNex.value = data.latest_nex || null; }),
     ]);
   } finally {
     refreshing.value = false;
@@ -108,9 +110,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <AppHeader title="今日进度">
+  <AppHeader title="今天学什么？">
     <template #subtitle>
-      <span>{{ statusText }}</span>
+      <span>从一个清晰的小任务开始。</span>
       <template v-if="currentUsername">
         · {{ currentUsername }}
       </template>
@@ -130,39 +132,29 @@ onMounted(() => {
   <main class="page-main">
     <section class="hero-cta">
       <div>
-        <h2>找 Nex 开练</h2>
-        <p>卡住时直接聊，或从最近提交进单题复盘。</p>
+        <p class="hero-kicker">今日学习入口</p>
+        <h2>和 Nex 做一轮有目标的练习</h2>
+        <p>从当前任务、一次提交，或你卡住的知识点开始。Nex 会把本轮收获放回你的复习节奏。</p>
       </div>
-      <RouterLink class="btn-primary" to="/coach">打开 Nex</RouterLink>
+      <RouterLink class="btn-primary" to="/coach">开始 Nex 陪练</RouterLink>
     </section>
-
-    <DayNavigator
-      :selected-date="selectedDate"
-      :is-today="isViewingToday"
-      :heading="isViewingToday ? '今日' : selectedDate"
-      @prev="onPrev"
-      @next="onNext"
-      @today="onToday"
-      @pick="onPick"
-    />
 
     <div class="metrics-grid">
-      <MetricCard :label="dayWord + '提交'" :value="todaySubmissions" />
-      <MetricCard :label="dayWord + '通过'" :value="todayAccepted" />
+      <MetricCard label="今日提交" :value="todaySubmissions" />
+      <MetricCard label="今日通过" :value="todayAccepted" />
       <MetricCard label="连续打卡" :value="streakDays" />
-      <MetricCard label="累计通过率" :value="acceptanceRate" />
     </div>
 
-    <section class="section-card">
-      <h2>近 7 日</h2>
-      <WeekBars
-        :bars="last7"
-        :selected-date="selectedDate"
-        @select="(d) => stats.setSelectedDate(d)"
-      />
+    <section v-if="latestNex" class="section-card nex-summary">
+      <div class="section-head">
+        <h2>最近一轮 Nex 总结</h2>
+        <span class="section-meta">{{ latestNex.goal }}</span>
+      </div>
+      <p>{{ latestNex.mastered || latestNex.remaining || "本轮记录已保存。" }}</p>
+      <RouterLink class="summary-link" to="/coach">{{ latestNex.remaining ? "继续本轮" : "开始下一轮" }}</RouterLink>
     </section>
 
-    <section class="section-card">
+    <section class="section-card task-card">
       <div class="section-head">
         <h2>今日计划</h2>
         <span class="section-meta">
@@ -192,10 +184,10 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
-      <p v-else class="empty">今天没有计划任务。去做一题或找 Nex 生成计划。</p>
+      <p v-else class="empty">还没有计划任务。告诉 Nex 你想练什么，我来帮你安排第一步。</p>
     </section>
 
-    <section class="section-card">
+    <section class="section-card task-card">
       <div class="section-head">
         <h2>今日复习</h2>
         <span class="section-meta">
@@ -225,10 +217,33 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
-      <p v-else class="empty">
-        今天没有到期复习。通过一题后会进入间隔复习队列。
-      </p>
+      <p v-else class="empty">今天没有到期复习。完成一次练习后，我会在合适的时间提醒你回来巩固。</p>
     </section>
+
+    <section class="section-card progress-card">
+      <div class="section-head">
+        <h2>近 7 日学习</h2>
+        <span class="section-meta">{{ statusText }}</span>
+      </div>
+      <WeekBars
+        :bars="last7"
+        :selected-date="selectedDate"
+        @select="(d) => stats.setSelectedDate(d)"
+      />
+    </section>
+
+    <details class="activity-details">
+      <summary>查看学习记录与题目画像</summary>
+      <div class="activity-content">
+        <DayNavigator
+          :selected-date="selectedDate"
+          :is-today="isViewingToday"
+          :heading="isViewingToday ? '今日' : selectedDate"
+          @prev="onPrev"
+          @next="onNext"
+          @today="onToday"
+          @pick="onPick"
+        />
 
     <section class="section-card">
       <h2>{{ dayWord }}题目</h2>
@@ -409,6 +424,8 @@ onMounted(() => {
         </tbody>
       </table>
     </section>
+      </div>
+    </details>
   </main>
 </template>
 
@@ -419,6 +436,15 @@ onMounted(() => {
   line-height: 1.4;
   max-width: 280px;
 }
+.hero-cta { align-items: center; }
+.hero-kicker { margin: 0 0 4px; color: var(--accent); font-size: 13px; font-weight: 650; }
+.hero-cta h2 { margin: 0; font-size: 23px; letter-spacing: -.03em; }
+.hero-cta p:not(.hero-kicker) { max-width: 620px; margin: 8px 0 0; color: var(--muted); }
+.task-card { margin-bottom: 12px; }
+.progress-card { margin-top: 16px; }
+.activity-details { margin-top: 24px; }
+.activity-details > summary { color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; }
+.activity-details[open] > summary { margin-bottom: 12px; color: var(--accent); }
 .toolbar {
   display: flex;
   flex-wrap: wrap;

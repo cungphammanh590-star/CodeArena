@@ -393,6 +393,62 @@ JAVA_TOOL_SPECS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_user_knowledge",
+            "description": (
+                "在用户私有知识库中检索相关知识点（用户粘贴的八股/笔记/PDF 抽取结果）。"
+                "当用户问题可能涉及他自己学过的材料时优先调用；回答时引用返回的 title/source_title。"
+                "与 remember/recall_memories（偏好事实）不同。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "检索问题或关键词"},
+                    "topic": {
+                        "type": "string",
+                        "description": "可选专题过滤，如 java-concurrency",
+                    },
+                    "limit": {"type": "integer", "description": "条数 1～10，默认 5"},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_knowledge_point",
+            "description": "按 kp_id 读取用户知识点全文，用于展开引用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kp_id": {"type": "integer", "description": "知识点 id"},
+                },
+                "required": ["kp_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_kp_review_due",
+            "description": (
+                "读取用户知识点闪卡今日到期列表（八股/笔记间隔复习）。"
+                "与 get_review_due（刷题 SRS）不同；可用于督促概念复习。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "条数 1～50，默认 20"},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 # 仅依赖会话消息 / 本地沙箱，不回调 Java

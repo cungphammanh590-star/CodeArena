@@ -45,6 +45,18 @@ window.addEventListener("message", (event) => {
   if (data.type === "auth_clear") {
     pushTokenToExtension("", null);
   }
+  if (data.type === "extension_probe") {
+    chrome.runtime.sendMessage({ type: "get_bridge_status" }, (response) => {
+      void chrome.runtime.lastError;
+      window.postMessage({
+        source: "codearena-extension",
+        type: "extension_status",
+        installed: true,
+        logged_in: Boolean(response?.loggedIn),
+        pending_count: Number(response?.pendingCount || 0),
+      }, window.location.origin);
+    });
+  }
 });
 
 // 启动即拉一次；再延迟一次覆盖 Vue boot 写入 token 的竞态

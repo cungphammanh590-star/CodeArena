@@ -8,6 +8,7 @@
 | 刷题 | `problems`、`submissions` |
 | 学习 | `problem_lists`、`problem_list_items`、`learning_prefs`、`user_problem_flags`、`study_plans`、`plan_daily_tasks`、`goal_problem_banks`、`user_problem_srs` |
 | Nex | `coach_sessions`、`coach_turns`、`user_coach_memories` |
+| 知识库 | `kb_documents`、`kb_knowledge_points`、`kb_embeddings`、`user_kp_srs`（V8–V9；向量在 Qdrant） |
 | 用量 | `llm_usage_events` |
 
 V5 已删除无用占位：`team_*`、`pay_orders`、`plan_notifications`、`knowledge_points`、`user_kp_mastery`、`coach_code_runs`、空聚合表 `problem_stats` / `problem_daily_stats`。
@@ -35,6 +36,10 @@ V7：`user_problem_srs`（题级 SM-2：ease / interval_days / reps / due_at / s
 
 `/api/review/today`：`plan_items`（计划）+ `review_items`/`due`（SRS）；`queue` 为合并去重列表。
 
+## Qdrant
+
+用户知识库向量索引（可重建）。Collection 默认 `leetmate_user_kb`；检索强制 `user_id` filter。详见 [KNOWLEDGE_BASE.md](./KNOWLEDGE_BASE.md)。
+
 ## Redis
 
 | 用途 | 说明 |
@@ -53,4 +58,4 @@ V7：`user_problem_srs`（题级 SM-2：ease / interval_days / reps / due_at / s
 Redis 挂了：静默直查 DB
 ```
 
-前端：进页加载 + 手动刷新。不维护第二套 PG 聚合写路径。
+前端：进页加载 + 手动刷新。不维护第二套 PG 聚合写路径，也不轮询提交同步状态；最近提交本身就是同步事实来源。

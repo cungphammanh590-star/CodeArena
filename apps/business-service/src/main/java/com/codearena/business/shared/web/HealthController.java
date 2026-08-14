@@ -36,6 +36,12 @@ public class HealthController {
     @Value("${codearena.llm.base-url:http://127.0.0.1:8091}")
     private String llmBaseUrl;
 
+    @Value("${codearena.knowledge.enabled:false}")
+    private boolean knowledgeEnabled;
+
+    @Value("${codearena.mail.enabled:false}")
+    private boolean mailEnabled;
+
     @GetMapping("/health")
     public Map<String, Object> health() {
         boolean dbOk = true;
@@ -56,6 +62,10 @@ public class HealthController {
         body.put("llm_provider", coachOk ? "ollama" : "unavailable");
         body.put("llm_base_url", llmBaseUrl);
         body.put("kg_imported", true);
+        body.put("capabilities", Map.of(
+                "nex", coachOk,
+                "knowledge", knowledgeEnabled,
+                "email_export", mailEnabled));
         return body;
     }
 

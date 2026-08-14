@@ -1,4 +1,4 @@
-# CodeArena infra-only: postgres + redis + nacos
+# CodeArena infra-only: postgres + redis + nacos + qdrant
 #   docker compose -f docker-compose.infra.yml up -d
 
 name: codearena-infra
@@ -40,6 +40,21 @@ services:
       timeout: 3s
       retries: 5
 
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: codearena-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - codearena_qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   nacos:
     image: nacos/nacos-server:v2.3.2
     container_name: codearena-nacos
@@ -59,4 +74,5 @@ services:
 volumes:
   codearena_pg_data:
   codearena_redis_data:
+  codearena_qdrant_data:
   codearena_nacos_data:

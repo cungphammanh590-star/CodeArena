@@ -4,7 +4,7 @@ import { RouterView, useRoute } from "vue-router";
 import AppTopbar from "@/components/AppTopbar.vue";
 
 const route = useRoute();
-const showChrome = computed(() => route.name !== "login");
+const showChrome = computed(() => !["login", "landing", "demo", "onboarding"].includes(String(route.name)));
 </script>
 
 <template>

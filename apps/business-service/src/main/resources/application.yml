@@ -8,6 +8,10 @@ spring:
   threads:
     virtual:
       enabled: true
+  servlet:
+    multipart:
+      max-file-size: ${CODEARENA_KNOWLEDGE_MAX_UPLOAD_MB:80}MB
+      max-request-size: ${CODEARENA_KNOWLEDGE_MAX_UPLOAD_MB:80}MB
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DB:codearena}
     username: ${POSTGRES_USER:codearena}
@@ -35,6 +39,14 @@ spring:
       port: ${REDIS_PORT:6380}
       password: ${REDIS_PASSWORD:}
       database: ${REDIS_DB:0}
+  mail:
+    host: ${CODEARENA_SMTP_HOST:}
+    port: ${CODEARENA_SMTP_PORT:587}
+    username: ${CODEARENA_SMTP_USERNAME:}
+    password: ${CODEARENA_SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${CODEARENA_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${CODEARENA_SMTP_STARTTLS:true}
   cloud:
     compatibility-verifier:
       enabled: false
@@ -96,3 +108,28 @@ codearena:
     redis-enabled: ${CODEARENA_CACHE_REDIS_ENABLED:true}
     stats-enabled: ${CODEARENA_CACHE_STATS_ENABLED:true}
     stats-ttl-seconds: ${CODEARENA_CACHE_STATS_TTL_SECONDS:3600}
+  knowledge:
+    enabled: ${CODEARENA_KNOWLEDGE_ENABLED:true}
+    storage-dir: ${CODEARENA_KNOWLEDGE_STORAGE_DIR:${user.home}/.codearena/knowledge}
+    llm-clean-enabled: ${CODEARENA_KNOWLEDGE_LLM_CLEAN:false}
+    llm-refine-enabled: ${CODEARENA_KNOWLEDGE_LLM_REFINE:false}
+    max-raw-chars: ${CODEARENA_KNOWLEDGE_MAX_RAW_CHARS:200000}
+    max-knowledge-points: ${CODEARENA_KNOWLEDGE_MAX_KPS:200}
+    qdrant:
+      url: ${CODEARENA_QDRANT_URL:http://127.0.0.1:6333}
+      collection: ${CODEARENA_QDRANT_COLLECTION:leetmate_user_kb}
+      api-key: ${CODEARENA_QDRANT_API_KEY:}
+    embedding:
+      provider: ${CODEARENA_EMBEDDING_PROVIDER:mock}
+      model: ${CODEARENA_EMBEDDING_MODEL:mock-hash-v1}
+      version: ${CODEARENA_EMBEDDING_VERSION:1}
+      dim: ${CODEARENA_EMBEDDING_DIM:384}
+      http-url: ${CODEARENA_EMBEDDING_HTTP_URL:}
+      http-api-key: ${CODEARENA_EMBEDDING_HTTP_API_KEY:}
+    llm:
+      http-url: ${CODEARENA_KNOWLEDGE_LLM_URL:}
+      http-api-key: ${CODEARENA_KNOWLEDGE_LLM_API_KEY:}
+      model: ${CODEARENA_KNOWLEDGE_LLM_MODEL:}
+  mail:
+    enabled: ${CODEARENA_MAIL_ENABLED:false}
+    from: ${CODEARENA_MAIL_FROM:no-reply@codearena.local}

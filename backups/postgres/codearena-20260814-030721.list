@@ -1,0 +1,223 @@
+;
+; Archive created at 2026-08-14 10:07:47 UTC
+;     dbname: codearena
+;     TOC Entries: 212
+;     Compression: gzip
+;     Dump Version: 1.16-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 18.4
+;     Dumped by pg_dump version: 18.6 (Debian 18.6-1.pgdg13+2)
+;
+;
+; Selected TOC Entries:
+;
+5; 2615 17391 SCHEMA - public codearena
+4208; 0 0 COMMENT - SCHEMA public codearena
+4209; 0 0 ACL - SCHEMA public codearena
+228; 1259 17512 TABLE public auth_sessions codearena
+227; 1259 17511 SEQUENCE public auth_sessions_id_seq codearena
+4210; 0 0 SEQUENCE OWNED BY public auth_sessions_id_seq codearena
+238; 1259 17796 TABLE public coach_sessions codearena
+240; 1259 17835 TABLE public coach_turns codearena
+239; 1259 17834 SEQUENCE public coach_turns_id_seq codearena
+4211; 0 0 SEQUENCE OWNED BY public coach_turns_id_seq codearena
+219; 1259 17392 TABLE public flyway_schema_history codearena
+247; 1259 17976 TABLE public goal_problem_banks codearena
+252; 1259 18121 TABLE public kb_documents codearena
+251; 1259 18120 SEQUENCE public kb_documents_id_seq codearena
+4212; 0 0 SEQUENCE OWNED BY public kb_documents_id_seq codearena
+256; 1259 18184 TABLE public kb_embeddings codearena
+255; 1259 18183 SEQUENCE public kb_embeddings_id_seq codearena
+4213; 0 0 SEQUENCE OWNED BY public kb_embeddings_id_seq codearena
+254; 1259 18148 TABLE public kb_knowledge_points codearena
+253; 1259 18147 SEQUENCE public kb_knowledge_points_id_seq codearena
+4214; 0 0 SEQUENCE OWNED BY public kb_knowledge_points_id_seq codearena
+236; 1259 17678 TABLE public learning_prefs codearena
+235; 1259 17677 SEQUENCE public learning_prefs_id_seq codearena
+4215; 0 0 SEQUENCE OWNED BY public learning_prefs_id_seq codearena
+249; 1259 18051 TABLE public llm_usage_events codearena
+248; 1259 18050 SEQUENCE public llm_usage_events_id_seq codearena
+4216; 0 0 SEQUENCE OWNED BY public llm_usage_events_id_seq codearena
+246; 1259 17925 TABLE public plan_daily_tasks codearena
+245; 1259 17924 SEQUENCE public plan_daily_tasks_id_seq codearena
+4217; 0 0 SEQUENCE OWNED BY public plan_daily_tasks_id_seq codearena
+234; 1259 17655 TABLE public problem_list_items codearena
+233; 1259 17638 TABLE public problem_lists codearena
+230; 1259 17536 TABLE public problems codearena
+229; 1259 17535 SEQUENCE public problems_id_seq codearena
+4218; 0 0 SEQUENCE OWNED BY public problems_id_seq codearena
+244; 1259 17894 TABLE public study_plans codearena
+243; 1259 17893 SEQUENCE public study_plans_id_seq codearena
+4219; 0 0 SEQUENCE OWNED BY public study_plans_id_seq codearena
+232; 1259 17554 TABLE public submissions codearena
+231; 1259 17553 SEQUENCE public submissions_id_seq codearena
+4220; 0 0 SEQUENCE OWNED BY public submissions_id_seq codearena
+242; 1259 17863 TABLE public user_coach_memories codearena
+241; 1259 17862 SEQUENCE public user_coach_memories_id_seq codearena
+4221; 0 0 SEQUENCE OWNED BY public user_coach_memories_id_seq codearena
+225; 1259 17472 TABLE public user_credentials codearena
+224; 1259 17452 TABLE public user_identities codearena
+223; 1259 17451 SEQUENCE public user_identities_id_seq codearena
+4222; 0 0 SEQUENCE OWNED BY public user_identities_id_seq codearena
+257; 1259 18342 TABLE public user_kp_srs codearena
+226; 1259 17485 TABLE public user_llm_settings codearena
+237; 1259 17699 TABLE public user_problem_flags codearena
+250; 1259 18092 TABLE public user_problem_srs codearena
+222; 1259 17432 TABLE public user_profiles codearena
+221; 1259 17410 TABLE public users codearena
+220; 1259 17409 SEQUENCE public users_id_seq codearena
+4223; 0 0 SEQUENCE OWNED BY public users_id_seq codearena
+3797; 2604 17515 DEFAULT public auth_sessions id codearena
+3825; 2604 17838 DEFAULT public coach_turns id codearena
+3860; 2604 18124 DEFAULT public kb_documents id codearena
+3869; 2604 18187 DEFAULT public kb_embeddings id codearena
+3863; 2604 18151 DEFAULT public kb_knowledge_points id codearena
+3810; 2604 17681 DEFAULT public learning_prefs id codearena
+3843; 2604 18054 DEFAULT public llm_usage_events id codearena
+3838; 2604 17928 DEFAULT public plan_daily_tasks id codearena
+3800; 2604 17539 DEFAULT public problems id codearena
+3834; 2604 17897 DEFAULT public study_plans id codearena
+3802; 2604 17557 DEFAULT public submissions id codearena
+3828; 2604 17866 DEFAULT public user_coach_memories id codearena
+3788; 2604 17455 DEFAULT public user_identities id codearena
+3780; 2604 17413 DEFAULT public users id codearena
+4172; 0 17512 TABLE DATA public auth_sessions codearena
+4182; 0 17796 TABLE DATA public coach_sessions codearena
+4184; 0 17835 TABLE DATA public coach_turns codearena
+4163; 0 17392 TABLE DATA public flyway_schema_history codearena
+4191; 0 17976 TABLE DATA public goal_problem_banks codearena
+4196; 0 18121 TABLE DATA public kb_documents codearena
+4200; 0 18184 TABLE DATA public kb_embeddings codearena
+4198; 0 18148 TABLE DATA public kb_knowledge_points codearena
+4180; 0 17678 TABLE DATA public learning_prefs codearena
+4193; 0 18051 TABLE DATA public llm_usage_events codearena
+4190; 0 17925 TABLE DATA public plan_daily_tasks codearena
+4178; 0 17655 TABLE DATA public problem_list_items codearena
+4177; 0 17638 TABLE DATA public problem_lists codearena
+4174; 0 17536 TABLE DATA public problems codearena
+4188; 0 17894 TABLE DATA public study_plans codearena
+4176; 0 17554 TABLE DATA public submissions codearena
+4186; 0 17863 TABLE DATA public user_coach_memories codearena
+4169; 0 17472 TABLE DATA public user_credentials codearena
+4168; 0 17452 TABLE DATA public user_identities codearena
+4201; 0 18342 TABLE DATA public user_kp_srs codearena
+4170; 0 17485 TABLE DATA public user_llm_settings codearena
+4181; 0 17699 TABLE DATA public user_problem_flags codearena
+4194; 0 18092 TABLE DATA public user_problem_srs codearena
+4166; 0 17432 TABLE DATA public user_profiles codearena
+4165; 0 17410 TABLE DATA public users codearena
+4224; 0 0 SEQUENCE SET public auth_sessions_id_seq codearena
+4225; 0 0 SEQUENCE SET public coach_turns_id_seq codearena
+4226; 0 0 SEQUENCE SET public kb_documents_id_seq codearena
+4227; 0 0 SEQUENCE SET public kb_embeddings_id_seq codearena
+4228; 0 0 SEQUENCE SET public kb_knowledge_points_id_seq codearena
+4229; 0 0 SEQUENCE SET public learning_prefs_id_seq codearena
+4230; 0 0 SEQUENCE SET public llm_usage_events_id_seq codearena
+4231; 0 0 SEQUENCE SET public plan_daily_tasks_id_seq codearena
+4232; 0 0 SEQUENCE SET public problems_id_seq codearena
+4233; 0 0 SEQUENCE SET public study_plans_id_seq codearena
+4234; 0 0 SEQUENCE SET public submissions_id_seq codearena
+4235; 0 0 SEQUENCE SET public user_coach_memories_id_seq codearena
+4236; 0 0 SEQUENCE SET public user_identities_id_seq codearena
+4237; 0 0 SEQUENCE SET public users_id_seq codearena
+3907; 2606 17525 CONSTRAINT public auth_sessions auth_sessions_pkey codearena
+3940; 2606 17823 CONSTRAINT public coach_sessions coach_sessions_pkey codearena
+3947; 2606 17850 CONSTRAINT public coach_turns coach_turns_pkey codearena
+3885; 2606 17407 CONSTRAINT public flyway_schema_history flyway_schema_history_pk codearena
+3964; 2606 17991 CONSTRAINT public goal_problem_banks goal_problem_banks_pkey codearena
+3976; 2606 18139 CONSTRAINT public kb_documents kb_documents_pkey codearena
+3985; 2606 18199 CONSTRAINT public kb_embeddings kb_embeddings_pkey codearena
+3981; 2606 18169 CONSTRAINT public kb_knowledge_points kb_knowledge_points_pkey codearena
+3933; 2606 17692 CONSTRAINT public learning_prefs learning_prefs_pkey codearena
+3969; 2606 18076 CONSTRAINT public llm_usage_events llm_usage_events_pkey codearena
+3960; 2606 17940 CONSTRAINT public plan_daily_tasks plan_daily_tasks_pkey codearena
+3962; 2606 17942 CONSTRAINT public plan_daily_tasks plan_daily_tasks_plan_id_day_num_key codearena
+3931; 2606 17670 CONSTRAINT public problem_list_items problem_list_items_pkey codearena
+3928; 2606 17654 CONSTRAINT public problem_lists problem_lists_pkey codearena
+3913; 2606 17550 CONSTRAINT public problems problems_pkey codearena
+3915; 2606 17552 CONSTRAINT public problems problems_problem_id_key codearena
+3956; 2606 17911 CONSTRAINT public study_plans study_plans_pkey codearena
+3924; 2606 17567 CONSTRAINT public submissions submissions_pkey codearena
+3926; 2606 17569 CONSTRAINT public submissions submissions_submission_id_key codearena
+3911; 2606 17527 CONSTRAINT public auth_sessions uq_auth_sessions_token_hash codearena
+3987; 2606 18201 CONSTRAINT public kb_embeddings uq_kb_emb_point codearena
+3889; 2606 17430 CONSTRAINT public users uq_users_public_id codearena
+3891; 2606 17428 CONSTRAINT public users uq_users_username codearena
+3952; 2606 17884 CONSTRAINT public user_coach_memories user_coach_memories_pkey codearena
+3902; 2606 17479 CONSTRAINT public user_credentials user_credentials_pkey codearena
+3898; 2606 17463 CONSTRAINT public user_identities user_identities_pkey codearena
+3900; 2606 17465 CONSTRAINT public user_identities user_identities_provider_provider_uid_key codearena
+3990; 2606 18363 CONSTRAINT public user_kp_srs user_kp_srs_pkey codearena
+3905; 2606 17504 CONSTRAINT public user_llm_settings user_llm_settings_pkey codearena
+3938; 2606 17709 CONSTRAINT public user_problem_flags user_problem_flags_pkey codearena
+3972; 2606 18113 CONSTRAINT public user_problem_srs user_problem_srs_pkey codearena
+3895; 2606 17445 CONSTRAINT public user_profiles user_profiles_pkey codearena
+3893; 2606 17426 CONSTRAINT public users users_pkey codearena
+3886; 1259 17408 INDEX public flyway_schema_history_s_idx codearena
+3908; 1259 17534 INDEX public idx_auth_sessions_expires codearena
+3909; 1259 17533 INDEX public idx_auth_sessions_user codearena
+3941; 1259 17833 INDEX public idx_coach_sessions_user_kind codearena
+3942; 1259 17831 INDEX public idx_coach_sessions_user_problem codearena
+3943; 1259 17830 INDEX public idx_coach_sessions_user_submission codearena
+3944; 1259 17832 INDEX public idx_coach_sessions_user_topic codearena
+3945; 1259 17829 INDEX public idx_coach_sessions_user_updated codearena
+3948; 1259 17861 INDEX public idx_coach_turns_session_created codearena
+3965; 1259 17992 INDEX public idx_goal_banks_ref codearena
+3973; 1259 18145 INDEX public idx_kb_documents_user_created codearena
+3974; 1259 18146 INDEX public idx_kb_documents_user_status codearena
+3982; 1259 18208 INDEX public idx_kb_emb_active codearena
+3983; 1259 18207 INDEX public idx_kb_emb_kp codearena
+3977; 1259 18181 INDEX public idx_kb_kp_document codearena
+3978; 1259 18180 INDEX public idx_kb_kp_user_created codearena
+3979; 1259 18182 INDEX public idx_kb_kp_user_topic codearena
+3966; 1259 18083 INDEX public idx_llm_usage_session codearena
+3967; 1259 18082 INDEX public idx_llm_usage_user_created codearena
+3957; 1259 17948 INDEX public idx_plan_daily_tasks_date codearena
+3958; 1259 17949 INDEX public idx_plan_daily_tasks_plan_date codearena
+3929; 1259 17676 INDEX public idx_problem_list_items_order codearena
+3953; 1259 17923 INDEX public idx_study_plans_user_created codearena
+3954; 1259 17922 INDEX public idx_study_plans_user_status codearena
+3916; 1259 17580 INDEX public idx_submissions_problem_id codearena
+3917; 1259 17582 INDEX public idx_submissions_status codearena
+3918; 1259 17581 INDEX public idx_submissions_submitted_at codearena
+3919; 1259 17583 INDEX public idx_submissions_user codearena
+3920; 1259 18085 INDEX public idx_submissions_user_accepted_problem codearena
+3921; 1259 18086 INDEX public idx_submissions_user_problem_submitted codearena
+3922; 1259 18084 INDEX public idx_submissions_user_submitted codearena
+3949; 1259 17890 INDEX public idx_user_coach_memories_user_active codearena
+3950; 1259 17891 INDEX public idx_user_coach_memories_user_kind codearena
+3896; 1259 17471 INDEX public idx_user_identities_user codearena
+3988; 1259 18374 INDEX public idx_user_kp_srs_due codearena
+3903; 1259 17510 INDEX public idx_user_llm_settings_updated codearena
+3935; 1259 17715 INDEX public idx_user_problem_flags_user codearena
+3936; 1259 18087 INDEX public idx_user_problem_flags_user_mastered codearena
+3970; 1259 18119 INDEX public idx_user_problem_srs_due codearena
+3934; 1259 17698 INDEX public uq_learning_prefs_user codearena
+3887; 1259 17431 INDEX public uq_users_email codearena
+3995; 2606 17528 FK CONSTRAINT public auth_sessions auth_sessions_user_id_fkey codearena
+4001; 2606 17824 FK CONSTRAINT public coach_sessions coach_sessions_user_id_fkey codearena
+4002; 2606 17851 FK CONSTRAINT public coach_turns coach_turns_session_id_fkey codearena
+4003; 2606 17856 FK CONSTRAINT public coach_turns coach_turns_user_id_fkey codearena
+4010; 2606 18140 FK CONSTRAINT public kb_documents kb_documents_user_id_fkey codearena
+4013; 2606 18202 FK CONSTRAINT public kb_embeddings kb_embeddings_knowledge_point_id_fkey codearena
+4011; 2606 18170 FK CONSTRAINT public kb_knowledge_points kb_knowledge_points_document_id_fkey codearena
+4012; 2606 18175 FK CONSTRAINT public kb_knowledge_points kb_knowledge_points_user_id_fkey codearena
+3999; 2606 17693 FK CONSTRAINT public learning_prefs learning_prefs_user_id_fkey codearena
+4008; 2606 18077 FK CONSTRAINT public llm_usage_events llm_usage_events_user_id_fkey codearena
+4007; 2606 17943 FK CONSTRAINT public plan_daily_tasks plan_daily_tasks_plan_id_fkey codearena
+3998; 2606 17671 FK CONSTRAINT public problem_list_items problem_list_items_list_id_fkey codearena
+4005; 2606 17917 FK CONSTRAINT public study_plans study_plans_list_id_fkey codearena
+4006; 2606 17912 FK CONSTRAINT public study_plans study_plans_user_id_fkey codearena
+3996; 2606 17570 FK CONSTRAINT public submissions submissions_problem_id_fkey codearena
+3997; 2606 17575 FK CONSTRAINT public submissions submissions_user_id_fkey codearena
+4004; 2606 17885 FK CONSTRAINT public user_coach_memories user_coach_memories_user_id_fkey codearena
+3993; 2606 17480 FK CONSTRAINT public user_credentials user_credentials_user_id_fkey codearena
+3992; 2606 17466 FK CONSTRAINT public user_identities user_identities_user_id_fkey codearena
+4014; 2606 18369 FK CONSTRAINT public user_kp_srs user_kp_srs_knowledge_point_id_fkey codearena
+4015; 2606 18364 FK CONSTRAINT public user_kp_srs user_kp_srs_user_id_fkey codearena
+3994; 2606 17505 FK CONSTRAINT public user_llm_settings user_llm_settings_user_id_fkey codearena
+4000; 2606 17710 FK CONSTRAINT public user_problem_flags user_problem_flags_user_id_fkey codearena
+4009; 2606 18114 FK CONSTRAINT public user_problem_srs user_problem_srs_user_id_fkey codearena
+3991; 2606 17446 FK CONSTRAINT public user_profiles user_profiles_user_id_fkey codearena

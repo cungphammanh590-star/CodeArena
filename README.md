@@ -77,9 +77,15 @@ docker compose --profile observability up -d   # 可观测性（较重）
 
 | 路由 | 说明 |
 |------|------|
-| `/` | 仪表盘 |
+| `/` | 公开首页 |
+| `/demo` | 无需登录的学习流程演示 |
+| `/dashboard` | 登录后的个人学习首页 |
+| `/onboarding` | 首次使用目标与学习起点设置 |
 | `/problems/:id` | 题目详情 |
 | `/coach` | Nex（AI 陪练 SSE） |
+| `/knowledge` | 私有知识库与知识卡片 |
+| `/archive` | 学习档案、导出与账号数据权利 |
+| `/weekly-report` | 可切换自然周的个人学习周报 |
 | `/ops` | 维护台 |
 
 浏览器扩展见 [`docs/EXTENSION.md`](docs/EXTENSION.md)（`extension/`，经 Gateway，支持设备/账号登录）。

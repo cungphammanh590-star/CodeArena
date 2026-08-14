@@ -4,6 +4,8 @@ import com.codearena.business.coach.memory.service.CoachMemoryService;
 import com.codearena.business.coach.tool.CoachTool;
 import com.codearena.business.coach.tool.CoachToolContext;
 import com.codearena.business.coach.tool.CoachToolResult;
+import com.codearena.business.knowledge.config.KnowledgeProperties;
+import com.codearena.business.knowledge.srs.KpSrsService;
 import com.codearena.business.learning.mastery.domain.UserProblemFlagRepository;
 import com.codearena.business.learning.srs.SrsService;
 import com.codearena.business.submission.domain.SubmissionRepository;
@@ -20,6 +22,8 @@ public class GetUserProfileSummaryTool implements CoachTool {
     private final UserProblemFlagRepository flagRepository;
     private final CoachMemoryService memoryService;
     private final SrsService srsService;
+    private final KpSrsService kpSrsService;
+    private final KnowledgeProperties knowledgeProperties;
 
     @Override
     public String name() {
@@ -33,7 +37,7 @@ public class GetUserProfileSummaryTool implements CoachTool {
 
     @Override
     public String description() {
-        return "读取用户整体画像：提交量、掌握题数、今日复习到期数，以及活跃长期记忆摘要。";
+        return "读取用户整体画像：提交量、掌握题数、今日刷题/知识点复习到期数，以及活跃长期记忆摘要。";
     }
 
     @Override
@@ -45,6 +49,8 @@ public class GetUserProfileSummaryTool implements CoachTool {
                 .count();
         long mastered = flagRepository.findByUserIdAndMasteredTrue(context.userId()).size();
         long reviewDue = srsService.countDueToday(context.userId());
+        long kpReviewDue =
+                knowledgeProperties.isEnabled() ? kpSrsService.countDueToday(context.userId()) : 0L;
         List<Map<String, Object>> memories = memoryService.recall(context.userId(), null, 5).stream()
                 .map(memoryService::toView)
                 .toList();
@@ -53,8 +59,9 @@ public class GetUserProfileSummaryTool implements CoachTool {
         data.put("submission_count", total);
         data.put("mastered_count", mastered);
         data.put("review_due_count", reviewDue);
+        data.put("kp_review_due_count", kpReviewDue);
         data.put("memories", memories);
-        data.put("note", "客观统计 + 活跃长期记忆摘要");
+        data.put("note", "客观统计 + 活跃长期记忆摘要；kp_review_due_count 为知识点闪卡到期");
         return CoachToolResult.success(data);
     }
 }

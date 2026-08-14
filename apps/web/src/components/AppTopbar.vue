@@ -10,13 +10,15 @@ const showPrefs = computed(() => route.name === "dashboard");
 
 <template>
   <header class="app-topbar">
-    <RouterLink class="app-brand" to="/">
+    <RouterLink class="app-brand" to="/dashboard">
       CodeArena
       <span>Nex</span>
     </RouterLink>
     <nav class="app-nav" aria-label="主导航">
-      <RouterLink to="/">仪表盘</RouterLink>
+      <RouterLink to="/dashboard">仪表盘</RouterLink>
       <RouterLink to="/coach">Nex</RouterLink>
+      <RouterLink to="/knowledge">知识库</RouterLink>
+      <RouterLink to="/archive">档案</RouterLink>
       <RouterLink to="/ops">维护</RouterLink>
     </nav>
     <div class="app-topbar-actions">

@@ -23,6 +23,18 @@ public class UserProfileEntity {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Column(name = "onboarding_completed", nullable = false)
+    private Boolean onboardingCompleted = false;
+
+    @Column(name = "learning_goal", length = 32)
+    private String learningGoal;
+
+    @Column(name = "daily_minutes")
+    private Integer dailyMinutes;
+
+    @Column(name = "learning_start_mode", length = 32)
+    private String learningStartMode;
+
     @Column(columnDefinition = "TEXT")
     private String bio;
 

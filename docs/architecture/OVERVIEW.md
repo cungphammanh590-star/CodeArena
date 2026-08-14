@@ -1,7 +1,7 @@
 # CodeArena 架构文档
 
 浏览器扩展 / Web → Nginx → Gateway → **business-service**（业务写库）+ **llm-service**（仅 Nex SSE）。  
-数据：Postgres + Redis（Checkpoint / 可选 stats 缓存）。可观测性为 opt-in。
+数据：Postgres + Redis（Checkpoint / 可选 stats 缓存）+ **Qdrant**（用户知识库向量索引，可重建）。可观测性为 opt-in。
 
 ```mermaid
 flowchart LR
@@ -14,6 +14,7 @@ flowchart LR
   LLM -->|/internal/tools/exec| Biz
   Biz --> PG[(Postgres)]
   Biz --> Redis[(Redis)]
+  Biz --> Qdrant[(Qdrant)]
   LLM --> Redis
 ```
 
@@ -27,6 +28,7 @@ flowchart LR
 | [DATA_CACHE.md](./DATA_CACHE.md) | 表、索引、Redis 投影 |
 | [USER_DOMAIN.md](./USER_DOMAIN.md) | 鉴权与当前用户解析 |
 | [OBSERVABILITY.md](./OBSERVABILITY.md) | Prometheus / Loki / SkyWalking / Langfuse |
+| [KNOWLEDGE_BASE.md](./KNOWLEDGE_BASE.md) | 用户知识库 / RAG（PG + Qdrant） |
 | [ROADMAP.md](./ROADMAP.md) | 短路线（不做的与下一步） |
 | [../EXTENSION.md](../EXTENSION.md) | 浏览器扩展 |
 
@@ -38,6 +40,7 @@ flowchart LR
 | gateway | 8080 | 唯一 API 入口 |
 | business / llm | 8090 / 8091 | Docker 默认不映射宿主机；本机 `make` 直跑 |
 | postgres / redis-stack | 5432 / 6380 | 库 / Checkpoint+可选缓存 |
+| qdrant | 6333 | 用户知识库向量索引 |
 | nacos | 8848 | 可选；发现默认关闭 |
 | obs 栈 | 见 OBSERVABILITY | `make obs-up` |
 

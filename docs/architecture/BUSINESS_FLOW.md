@@ -24,6 +24,7 @@ flowchart LR
 | 题目 / 统计 / 掌握 | `/api/problems/**`、`/api/stats/**`、`/api/mastered` | Java |
 | 学习 / 题单 / 复习 | `/api/learning/**`、`/api/lists/**`、`/api/review/**` | Java |
 | 运维 | `/api/ops/**` | Java |
+| 知识库 | `/api/knowledge/**` | Java（PG 真相 + Qdrant 索引） |
 | Nex 编排 | `/api/coach/prepare|session|sessions|hint` | Java |
 | Nex 对话 SSE | `/api/coach/stream` | Python |
 | 内网工具 / 用量 | `/internal/tools/**`、`/internal/llm/**`、`/internal/users/**` | Java（不进公网） |
@@ -48,6 +49,7 @@ flowchart LR
 | `problem` / `submission` | `/api/problems/**`、`/api/stats/**`、`/submit` | 题与提交 |
 | `learning.*` | learning / lists / mastered / review | 偏好、题单、计划、SRS |
 | `coach` | `/api/coach/**`、`/internal/tools/**` | 会话与工具 |
+| `knowledge` | `/api/knowledge/**` | 用户知识库摄入与检索索引 |
 | `ops` | `/api/ops/**` | 运维台 |
 | `shared` | `/health`、缓存等 | 横切 |
 

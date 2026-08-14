@@ -161,7 +161,7 @@ onMounted(() => {
 <template>
   <AppHeader :title="title">
     <template #before>
-      <RouterLink class="back" to="/">← 仪表盘</RouterLink>
+      <RouterLink class="back" to="/dashboard">← 仪表盘</RouterLink>
     </template>
     <template #subtitle>
       <template v-if="errorText">{{ errorText }}</template>

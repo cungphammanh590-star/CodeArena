@@ -13,7 +13,9 @@ const username = ref("");
 const password = ref("");
 const busy = ref(false);
 const error = ref("");
-const mode = ref<"login" | "register">("login");
+const mode = ref<"login" | "register">(
+  route.query.mode === "register" ? "register" : "login",
+);
 
 async function submit() {
   error.value = "";
@@ -25,14 +27,13 @@ async function submit() {
   }
   busy.value = true;
   try {
-    if (mode.value === "login") {
-      await loginWithPassword(u, p);
-    } else {
-      await registerWithPassword(u, p);
-    }
+    const response = mode.value === "login"
+      ? await loginWithPassword(u, p)
+      : await registerWithPassword(u, p);
+    const completed = Boolean(response?.user?.profile?.onboarding_completed);
     const redirect =
-      typeof route.query.redirect === "string" ? route.query.redirect : "/";
-    await router.replace(redirect || "/");
+      typeof route.query.redirect === "string" ? route.query.redirect : "/dashboard";
+    await router.replace(completed ? (redirect || "/dashboard") : "/onboarding");
   } catch (e: unknown) {
     const status =
       e && typeof e === "object" && "response" in e
@@ -52,9 +53,9 @@ async function submit() {
 <template>
   <main class="login-page">
     <section class="panel">
-      <p class="brand">CodeArena</p>
+      <RouterLink class="brand" to="/">CodeArena</RouterLink>
       <h1>{{ mode === "login" ? "登录" : "注册" }}</h1>
-      <p class="hint">同步力扣提交，并与浏览器扩展共用同一账号。</p>
+      <p class="hint">建立你的代码与知识学习空间，登录后即可开始。</p>
 
       <label>
         用户名

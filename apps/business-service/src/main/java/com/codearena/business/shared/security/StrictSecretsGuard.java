@@ -31,6 +31,9 @@ public class StrictSecretsGuard {
     @Value("${codearena.internal.token:}")
     private String internalToken;
 
+    @Value("${codearena.llm.key-secret:}")
+    private String llmKeySecret;
+
     @Value("${codearena.security.strict-secrets:true}")
     private boolean strictSecrets;
 
@@ -66,7 +69,11 @@ public class StrictSecretsGuard {
             throw new IllegalStateException(
                     "Refuse to start: set CODEARENA_INTERNAL_TOKEN "
                             + "(not the dev default) for profile "
-                            + profiles);
+                    + profiles);
+        }
+        if (llmKeySecret == null || llmKeySecret.isBlank() || llmKeySecret.length() < 32) {
+            throw new IllegalStateException(
+                    "Refuse to start: set CODEARENA_LLM_KEY_SECRET (>=32 chars) for profile " + profiles);
         }
     }
 }
