@@ -44,6 +44,8 @@ const problemsPage = ref(1);
 const wrongPage = ref(1);
 const refreshing = ref(false);
 const latestNex = ref<Record<string, any> | null>(null);
+const gradingProblemId = ref<number | null>(null);
+const reviewFeedback = ref("");
 
 const filteredProblems = computed(() => {
   const raw = problemsQuery.value.trim().toLowerCase();
@@ -101,6 +103,20 @@ async function onRefresh() {
     ]);
   } finally {
     refreshing.value = false;
+  }
+}
+
+async function gradeReview(problemId: number, grade: "again" | "hard" | "good" | "easy") {
+  if (gradingProblemId.value != null) return;
+  gradingProblemId.value = problemId;
+  reviewFeedback.value = "";
+  try {
+    const result = await learning.gradeProblemReview(problemId, grade);
+    reviewFeedback.value = `已记录，下次复习约在 ${result.interval_days || 1} 天后。`;
+  } catch {
+    reviewFeedback.value = "评级没有保存，请稍后再试。";
+  } finally {
+    gradingProblemId.value = null;
   }
 }
 
@@ -194,12 +210,14 @@ onMounted(() => {
           {{ reviewDue.length ? reviewDue.length + " 题到期" : "" }}
         </span>
       </div>
+      <p v-if="reviewFeedback" class="review-feedback" aria-live="polite">{{ reviewFeedback }}</p>
       <table v-if="reviewDue.length" class="data-table">
         <thead>
           <tr>
             <th>题目</th>
             <th>难度</th>
             <th>为什么复习</th>
+            <th>完成后评级</th>
           </tr>
         </thead>
         <tbody>
@@ -214,6 +232,14 @@ onMounted(() => {
             </td>
             <td>{{ c.difficulty || "-" }}</td>
             <td class="reason-cell">{{ c.reason || "间隔复习到期" }}</td>
+            <td>
+              <div class="review-grade" aria-label="复习评级">
+                <button type="button" :disabled="gradingProblemId != null" @click="gradeReview(Number(c.problem_id || c.id), 'again')">Again</button>
+                <button type="button" :disabled="gradingProblemId != null" @click="gradeReview(Number(c.problem_id || c.id), 'hard')">Hard</button>
+                <button type="button" :disabled="gradingProblemId != null" @click="gradeReview(Number(c.problem_id || c.id), 'good')">Good</button>
+                <button type="button" :disabled="gradingProblemId != null" @click="gradeReview(Number(c.problem_id || c.id), 'easy')">Easy</button>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -436,6 +462,19 @@ onMounted(() => {
   line-height: 1.4;
   max-width: 280px;
 }
+.review-feedback { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.review-grade { display: flex; flex-wrap: wrap; gap: 6px; min-width: 210px; }
+.review-grade button {
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--text);
+  cursor: pointer;
+}
+.review-grade button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.review-grade button:disabled { cursor: wait; opacity: .55; }
 .hero-cta { align-items: center; }
 .hero-kicker { margin: 0 0 4px; color: var(--accent); font-size: 13px; font-weight: 650; }
 .hero-cta h2 { margin: 0; font-size: 23px; letter-spacing: -.03em; }

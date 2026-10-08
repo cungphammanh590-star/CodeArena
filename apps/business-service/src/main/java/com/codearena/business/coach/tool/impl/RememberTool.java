@@ -48,8 +48,12 @@ public class RememberTool implements CoachTool {
                 confidence = null;
             }
         }
+        String memoryKey = context.paramString("memory_key");
+        String evidence = context.paramString("evidence");
+        Integer ttlDays = context.paramInt("ttl_days");
         UserCoachMemoryEntity row = memoryService.remember(
-                context.userId(), kind, content, source, problemId, confidence);
+                context.userId(), kind, content, source, problemId, confidence,
+                memoryKey, evidence, context.sessionId(), ttlDays);
         Map<String, Object> data = new LinkedHashMap<>(memoryService.toView(row));
         data.put("note", "已写入长期记忆");
         return CoachToolResult.success(data);

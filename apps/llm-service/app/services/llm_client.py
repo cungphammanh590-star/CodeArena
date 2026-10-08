@@ -10,7 +10,7 @@ from app.config import Settings, get_settings
 
 
 class LLMClient:
-    """Shared async HTTP client for Ollama / OpenAI-compatible APIs."""
+    """Shared async HTTP client for OpenAI-compatible APIs."""
 
     def __init__(self, settings: Optional[Settings] = None) -> None:
         self.settings = settings or get_settings()
@@ -49,24 +49,6 @@ class LLMClient:
                 "provider": "mock",
                 "model": model_name,
                 "content": f"[mock] received: {last_user[:200]}",
-            }
-
-        if provider == "ollama":
-            url = f"{self.settings.llm_base_url.rstrip('/')}/api/chat"
-            payload = {
-                "model": model_name,
-                "messages": messages,
-                "stream": False,
-            }
-            resp = await self._client.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            message = data.get("message") or {}
-            return {
-                "provider": "ollama",
-                "model": model_name,
-                "content": str(message.get("content") or ""),
-                "raw": data,
             }
 
         # OpenAI-compatible (DeepSeek etc.)

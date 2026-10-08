@@ -51,7 +51,8 @@ public class GetUserProfileSummaryTool implements CoachTool {
         long reviewDue = srsService.countDueToday(context.userId());
         long kpReviewDue =
                 knowledgeProperties.isEnabled() ? kpSrsService.countDueToday(context.userId()) : 0L;
-        List<Map<String, Object>> memories = memoryService.recall(context.userId(), null, 5).stream()
+        List<Map<String, Object>> memories = memoryService.recall(
+                        context.userId(), null, context.problemId(), 5).stream()
                 .map(memoryService::toView)
                 .toList();
         Map<String, Object> data = new LinkedHashMap<>();

@@ -6,10 +6,9 @@ import logging
 import threading
 from typing import Any, Optional
 
-import httpx
-
 from app.config import get_settings
 from app.observability.request_context import get_request_id
+from app.services import internal_rpc
 
 logger = logging.getLogger(__name__)
 
@@ -142,16 +141,7 @@ def flush_usage_to_business(
         "success": bool(c.success),
         "error_code": c.error_code or "",
     }
-    url = f"{cfg.business_internal_url.rstrip('/')}/internal/llm/usage"
-    headers = {
-        "X-Internal-Token": cfg.internal_tool_token,
-        "X-User-Public-Id": user_public_id or "",
-        "Content-Type": "application/json",
-    }
     try:
-        with httpx.Client(timeout=5.0, trust_env=False) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code >= 400:
-                logger.warning("llm usage record failed status=%s", resp.status_code)
+        internal_rpc.record_usage(cfg, user_public_id, payload)
     except Exception as exc:  # noqa: BLE001
         logger.warning("llm usage record error: %s", exc)

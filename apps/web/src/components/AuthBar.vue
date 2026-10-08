@@ -21,7 +21,7 @@ async function load() {
     const u = data?.user || {};
     label.value = u.display_name || u.username || u.public_id || "已登录";
   } catch {
-    label.value = "登录失效";
+    label.value = "未登录";
   }
 }
 

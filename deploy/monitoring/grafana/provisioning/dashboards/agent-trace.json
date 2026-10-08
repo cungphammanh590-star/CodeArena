@@ -1,0 +1,47 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "datasource": {"type": "loki", "uid": "Loki"},
+      "description": "Graph nodes, retrievals and tool calls for one coach session. This is an audit trail, not hidden chain-of-thought.",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 16, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Ascending", "wrapLogMessage": true},
+      "targets": [{"datasource": {"type": "loki", "uid": "Loki"}, "editorMode": "code", "expr": "{service=\"llm-service\", event_type=~\"turn_.*|node_end|tool_.*\"} | json | session_id=\"$session\"", "queryType": "range", "refId": "A"}],
+      "title": "Agent conversation timeline",
+      "type": "logs"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "Loki"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 2,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [{"datasource": {"type": "loki", "uid": "Loki"}, "editorMode": "code", "expr": "avg_over_time({service=\"llm-service\", event_type=\"tool_end\"} | json | unwrap duration_ms [5m]) by (tool_name)", "queryType": "range", "refId": "A"}],
+      "title": "Tool latency by name",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "Loki"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [{"datasource": {"type": "loki", "uid": "Loki"}, "editorMode": "code", "expr": "sum by (tool_name) (count_over_time({service=\"llm-service\", event_type=\"tool_end\"}[5m]))", "queryType": "range", "refId": "A"}],
+      "title": "Tool / retrieval calls",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["codearena", "agent", "lite"],
+  "templating": {"list": [{"current": {}, "datasource": {"type": "loki", "uid": "Loki"}, "definition": "label_values({service=\"llm-service\"} | json, session_id)", "hide": 0, "includeAll": false, "label": "Session", "multi": false, "name": "session", "options": [], "query": "label_values({service=\"llm-service\"} | json, session_id)", "refresh": 2, "regex": "", "skipUrlSync": false, "sort": 1, "type": "query"}]},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "Nex Agent Trace (Lite)",
+  "uid": "nex-agent-trace-lite",
+  "version": 1
+}

@@ -9,3 +9,15 @@ spring:
       host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+
+# SMTP is optional in local Docker.  Keeping its health indicator enabled makes
+# the container unhealthy (and logs a stack trace every probe) when credentials
+# are intentionally absent.
+management:
+  health:
+    mail:
+      enabled: false
+
+codearena:
+  internal:
+    grpc-host: 0.0.0.0

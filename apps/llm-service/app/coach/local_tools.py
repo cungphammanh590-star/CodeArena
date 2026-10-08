@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,8 +21,14 @@ LOCAL_P0_TOOL_NAMES = SOLVE_TOOL_NAMES | CODE_TOOL_NAMES | ASK_TOOL_NAMES | froz
 )
 
 _SUPPORTED_LANG = {
-    "python": (".py", ["python3"]),
-    "py": (".py", ["python3"]),
+    "python": ("python", "main.py", None, ["python3", "main.py"]),
+    "py": ("python", "main.py", None, ["python3", "main.py"]),
+    "javascript": ("javascript", "main.js", None, ["node", "main.js"]),
+    "js": ("javascript", "main.js", None, ["node", "main.js"]),
+    "node": ("javascript", "main.js", None, ["node", "main.js"]),
+    "java": ("java", "Main.java", ["javac", "Main.java"], ["java", "Main"]),
+    "cpp": ("cpp", "main.cpp", ["g++", "-O2", "-std=c++17", "main.cpp", "-o", "main"], ["./main"]),
+    "c++": ("cpp", "main.cpp", ["g++", "-O2", "-std=c++17", "main.cpp", "-o", "main"], ["./main"]),
 }
 
 
@@ -103,19 +110,25 @@ def _code_execution(
             content=_json(
                 {
                     "ok": False,
-                    "error": f"unsupported language={language}; P0 supports python",
+                    "error": f"unsupported language={language}; supported: python/javascript/java/cpp",
                 }
             )
         )
     if not code.strip():
         return LocalToolResult(content=_json({"ok": False, "error": "code is empty"}))
 
-    ext, argv_prefix = _SUPPORTED_LANG[language]
+    canonical, filename, compile_argv, run_argv = _SUPPORTED_LANG[language]
+    required = [compile_argv[0] if compile_argv else run_argv[0]]
+    if compile_argv:
+        required.append(run_argv[0])
+    missing = [cmd for cmd in required if not cmd.startswith("./") and shutil.which(cmd) is None]
+    if missing:
+        return LocalToolResult(content=_json({"ok": False, "error": f"runtime unavailable: {missing[0]}"}))
     user_id = str(state.get("user_public_id") or "anon")
     session_id = str(state.get("session_id") or "unknown")
     run_id = uuid.uuid4().hex[:12]
     workdir = sandbox.run_dir(user_id=user_id, session_id=session_id, run_id=run_id)
-    source_path = workdir / f"main{ext}"
+    source_path = workdir / filename
     source_path.write_text(code, encoding="utf-8")
     if stdin:
         (workdir / "stdin.txt").write_text(stdin, encoding="utf-8")
@@ -126,13 +139,43 @@ def _code_execution(
         max_output_chars=sandbox.settings.max_output_chars,
         cpu_seconds=timeout,
     )
-    argv = [*argv_prefix, str(source_path)]
-    request = ExecRequest.of_argv(argv, workdir=str(workdir), limits=limits)
+    run_env = {"HOME": str(workdir)}
+    if compile_argv:
+        compile_request = ExecRequest.of_argv(
+            compile_argv,
+            workdir=str(workdir),
+            env=run_env,
+            limits=limits,
+        )
+        compiled = sandbox.run(compile_request, user_id=user_id)
+        if not compiled.ok or compiled.exit_code != 0:
+            compile_payload = {
+                "language": canonical,
+                "exit_code": compiled.exit_code,
+                "timed_out": compiled.timed_out,
+                "duration_ms": compiled.duration_ms,
+                "stdout_preview": truncate_preview(compiled.stdout, 1500),
+                "stderr_preview": truncate_preview(compiled.stderr, 800),
+                "error": compiled.error or "compile failed",
+                "ok": False,
+                "stage": "compile",
+            }
+            return LocalToolResult(
+                content=_json(compile_payload),
+                sse_events=[{"type": "code_result", **compile_payload}],
+            )
+    request = ExecRequest.of_argv(
+        run_argv,
+        workdir=str(workdir),
+        env=run_env,
+        stdin=stdin,
+        limits=limits,
+    )
     result = sandbox.run(request, user_id=user_id)
 
     snippet_hash = "sha256:" + hashlib.sha256(code.encode("utf-8")).hexdigest()[:16]
     preview = {
-        "language": "python" if language in {"python", "py"} else language,
+        "language": canonical,
         "exit_code": result.exit_code,
         "timed_out": result.timed_out,
         "duration_ms": result.duration_ms,

@@ -17,6 +17,19 @@ scrape_configs:
           __path__: /var/lib/docker/containers/*/*-json.log
     pipeline_stages:
       - docker: {}
+      - json:
+          expressions:
+            level: level
+            service: service
+            event_type: event_type
+            node: node
+            tool_name: tool_name
+      - labels:
+          level:
+          service:
+          event_type:
+          node:
+          tool_name:
 
   - job_name: codearena-tmp-logs
     static_configs:
@@ -31,9 +44,12 @@ scrape_configs:
             service: service
             message: message
             request_id: request_id
+            event_type: event_type
+            node: node
             tool_name: tool_name
       - labels:
           level:
           service:
-          request_id:
+          event_type:
+          node:
           tool_name:

@@ -12,13 +12,17 @@ function extractRaw(err: unknown): string {
   if (typeof err === "object") {
     const o = err as {
       message?: unknown;
-      response?: { data?: { message?: unknown }; status?: number };
+      response?: { data?: { message?: unknown; detail?: unknown }; status?: number };
       status?: number;
       code?: string;
     };
     const apiMsg = o.response?.data?.message;
     if (typeof apiMsg === "string" && apiMsg.trim()) {
       return stripErrorPrefix(apiMsg.trim());
+    }
+    const apiDetail = o.response?.data?.detail;
+    if (typeof apiDetail === "string" && apiDetail.trim()) {
+      return stripErrorPrefix(apiDetail.trim());
     }
     if (typeof o.message === "string" && o.message.trim()) {
       return stripErrorPrefix(o.message.trim());
@@ -47,6 +51,19 @@ function httpStatus(err: unknown): number | null {
 /** 已知技术原文 → 用户话术 */
 function mapTechnical(raw: string): string | null {
   const t = raw.toLowerCase();
+
+  if (/llm probe failed: upstream\s*(401|403)/.test(t)) {
+    return "DeepSeek API Key 无效，请检查后重新填写";
+  }
+  if (/llm probe failed: upstream\s*402/.test(t)) {
+    return "DeepSeek 账户余额不足，请充值后重试";
+  }
+  if (/llm probe failed: upstream\s*429/.test(t)) {
+    return "DeepSeek 请求过于频繁，请稍后重试";
+  }
+  if (/llm probe failed: upstream\s*5\d\d/.test(t)) {
+    return "DeepSeek 服务暂时不可用，请稍后重试";
+  }
 
   if (
     /timed?\s*out|timeout|etimedout|超时|响应超时/.test(t) ||
@@ -85,7 +102,7 @@ function mapTechnical(raw: string): string | null {
 
   // 基础设施 / 内部实现泄漏
   if (
-    /business-service|llm-service|gateway|8090|8091|8080|redis|postgres|checkpoint|json\.set|httpx|traceback|stack trace|internal.?token|x-user-public-id|nacos|flyway/i.test(
+    /business-service|llm-service|gateway|8090|8091|8080|redis|postgres|checkpoint|json\.set|httpx|traceback|stack trace|internal.?token|x-user-public-id|flyway/i.test(
       raw,
     )
   ) {
@@ -136,13 +153,14 @@ export function toUserMessage(
   if (status === 403) return "没有权限执行此操作";
   if (status === 404) return "找不到相关内容";
   if (status === 429) return "操作太频繁，请稍后再试";
-  if (status != null && status >= 500) return "服务暂时不可用，请稍后再试";
 
   const raw = extractRaw(err);
   if (!raw) return fallback;
 
   const mapped = mapTechnical(raw);
   if (mapped) return mapped;
+
+  if (status != null && status >= 500) return "服务暂时不可用，请稍后再试";
 
   if (looksUserFacing(raw)) return raw;
 

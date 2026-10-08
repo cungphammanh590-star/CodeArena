@@ -52,7 +52,7 @@ public final class SrsScheduler {
         int nextReps = Math.max(0, reps);
         int nextLapses = Math.max(0, lapses);
 
-        if (grade.quality < 3) {
+        if (grade == Grade.AGAIN) {
             nextLapses += 1;
             nextReps = 0;
             nextInterval = 1;
@@ -89,6 +89,22 @@ public final class SrsScheduler {
 
     /** 首次建卡：明天到期。 */
     public static Snapshot enroll(OffsetDateTime now) {
-        return apply(2.5f, 0, 0, 0, Grade.GOOD, now);
+        return enroll(now, null);
+    }
+
+    /** 首次建卡按题目难度设置首个复习间隔：Hard 1 天、Medium 2 天、Easy 3 天。 */
+    public static Snapshot enroll(OffsetDateTime now, String difficulty) {
+        int interval = switch (String.valueOf(difficulty).trim().toLowerCase()) {
+            case "easy", "简单" -> 3;
+            case "hard", "困难" -> 1;
+            default -> 2;
+        };
+        return new Snapshot(
+                2.5f,
+                interval,
+                1,
+                0,
+                now.truncatedTo(ChronoUnit.SECONDS).plusDays(interval),
+                Grade.GOOD.label);
     }
 }

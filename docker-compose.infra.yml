@@ -1,4 +1,4 @@
-# CodeArena infra-only: postgres + redis + nacos + qdrant
+# CodeArena infra-only: postgres + redis + qdrant
 #   docker compose -f docker-compose.infra.yml up -d
 
 name: codearena-infra
@@ -55,24 +55,7 @@ services:
       timeout: 3s
       retries: 5
 
-  nacos:
-    image: nacos/nacos-server:v2.3.2
-    container_name: codearena-nacos
-    restart: unless-stopped
-    environment:
-      MODE: standalone
-      PREFER_HOST_MODE: hostname
-      JVM_XMS: 256m
-      JVM_XMX: 512m
-      NACOS_AUTH_ENABLE: "false"
-    ports:
-      - "${NACOS_PORT:-8848}:8848"
-      - "9848:9848"
-    volumes:
-      - codearena_nacos_data:/home/nacos/data
-
 volumes:
   codearena_pg_data:
   codearena_redis_data:
   codearena_qdrant_data:
-  codearena_nacos_data:

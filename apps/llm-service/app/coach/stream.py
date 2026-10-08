@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Iterator
 from typing import Any, Optional
 
@@ -16,7 +17,6 @@ from app.coach.checkpoint import (
 from app.coach.graph import GenerationCancelled, _action_prompt, compile_smart_graph
 from app.coach.phases import coerce_phase
 from app.coach.window import sanitize_messages_for_llm
-from app.observability.langfuse_setup import flush_langfuse, get_langfuse_handler
 from app.observability.usage_recorder import (
     begin_usage_turn,
     flush_usage_to_business,
@@ -26,6 +26,7 @@ from app.observability.logging_setup import log_extra
 from app.observability.request_context import get_request_id
 from app.services.llm_provider import fetch_user_llm_settings
 from app.services.tool_client import JavaToolClient
+from app.observability.agent_trace import agent_event
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +83,13 @@ def chat_stream(
     if provider == "api" and not llm.get("api_key"):
         yield {
             "type": "error",
-            "message": "Nex 需要云端 API Key。请到维护台为当前用户配置后重试。",
+            "message": "Nex 需要个人 API Key。请先填写并验证你的 DeepSeek API Key。",
         }
         return
-    if provider not in {"api", "ollama"}:
+    if provider != "api":
         yield {
             "type": "error",
-            "message": "当前模型配置不可用。请到维护台选择本地 Ollama 或云端 API。",
+            "message": "当前模型配置不可用。请先配置个人 DeepSeek API Key。",
         }
         return
 
@@ -129,6 +130,13 @@ def chat_stream(
         session_id,
         action or "-",
         extra=log_extra(request_id=get_request_id(), session_id=session_id),
+    )
+    turn_started = time.perf_counter()
+    agent_event(
+        "turn_start",
+        session_id=session_id,
+        status="running",
+        data={"action": action or "chat", "provider": provider},
     )
 
     while True:
@@ -185,6 +193,7 @@ def chat_stream(
                 "memory_digest": [],
                 "topic_digest": {},
                 "offer_payload": {},
+                "prompt_policy_trace": {},
                 "solve_session": values.get("solve_session"),
                 "paused_ask": values.get("paused_ask"),
                 "pending_followup": values.get("pending_followup"),
@@ -204,19 +213,13 @@ def chat_stream(
                 "configurable": {"thread_id": cache_key},
             }
             callbacks: list[Any] = []
-            lf_handler = get_langfuse_handler()
-            if lf_handler is not None:
-                callbacks.append(lf_handler)
-                stream_config["metadata"] = {
-                    "langfuse_session_id": session_id,
-                    "langfuse_user_id": user_public_id or "anon",
-                }
             usage_cb = make_usage_callback()
             if usage_cb is not None:
                 callbacks.append(usage_cb)
             if callbacks:
                 stream_config["callbacks"] = callbacks
             begin_usage_turn()
+            node_started = time.perf_counter()
             for mode, data in graph.stream(
                 graph_input,
                 stream_config,
@@ -239,6 +242,16 @@ def chat_stream(
                     yield event
                 elif mode == "updates" and isinstance(data, dict):
                     for _node, update in data.items():
+                        now = time.perf_counter()
+                        agent_event(
+                            "node_end",
+                            session_id=session_id,
+                            node=str(_node),
+                            status="ok",
+                            duration_ms=(now - node_started) * 1000,
+                            data={"updated_fields": list(update)[:30] if isinstance(update, dict) else []},
+                        )
+                        node_started = now
                         if isinstance(update, dict):
                             if update.get("reply"):
                                 reply = str(update.get("reply") or reply)
@@ -279,7 +292,6 @@ def chat_stream(
             if awaiting and not done:
                 done_event["awaiting"] = awaiting
                 done_event["done"] = False
-            flush_langfuse()
             flush_usage_to_business(
                 user_public_id=user_public_id,
                 session_id=session_id,
@@ -287,14 +299,26 @@ def chat_stream(
                 api_provider=str(llm.get("api_provider") or ""),
                 model=str(llm.get("coach_model") or ""),
             )
+            agent_event(
+                "turn_end",
+                session_id=session_id,
+                status="ok",
+                duration_ms=(time.perf_counter() - turn_started) * 1000,
+                data={"intent": intent_out, "phase": phase_out, "close_scope": close_scope},
+            )
             yield done_event
             return
         except GenerationCancelled:
+            agent_event(
+                "turn_end",
+                session_id=session_id,
+                status="cancelled",
+                duration_ms=(time.perf_counter() - turn_started) * 1000,
+            )
             if graph is not None:
                 _repair_checkpoint_after_cancel(
                     graph, {"configurable": {"thread_id": cache_key}}
                 )
-            flush_langfuse()
             flush_usage_to_business(
                 user_public_id=user_public_id,
                 session_id=session_id,
@@ -328,7 +352,13 @@ def chat_stream(
                 except Exception:  # noqa: BLE001
                     pass
             logger.exception("coach stream failed")
-            flush_langfuse()
+            agent_event(
+                "turn_end",
+                session_id=session_id,
+                status="error",
+                duration_ms=(time.perf_counter() - turn_started) * 1000,
+                data={"error_type": type(exc).__name__},
+            )
             flush_usage_to_business(
                 user_public_id=user_public_id,
                 session_id=session_id,

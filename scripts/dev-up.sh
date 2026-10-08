@@ -14,16 +14,16 @@ fi
 
 case "$MODE" in
   infra)
-    echo "Starting infra (postgres, redis, nacos)..."
+    echo "Starting infra (postgres, redis, qdrant)..."
     docker compose -f docker-compose.infra.yml up -d
     ;;
   full|all)
     echo "Starting full default stack..."
-    docker compose up -d --build
+    docker compose up -d
     ;;
   obs|observability)
-    echo "Starting stack with observability profile..."
-    docker compose --profile observability up -d --build
+    echo "Starting lightweight observability (Prometheus, Grafana, Loki, Promtail)..."
+    docker compose --profile observability up -d prometheus grafana loki promtail
     ;;
   *)
     echo "Usage: $0 [infra|full|observability]"
@@ -34,7 +34,6 @@ esac
 echo "Done. Health tips:"
 echo "  postgres  localhost:5432"
 echo "  redis     localhost:6380 (redis-stack / RedisJSON)"
-echo "  nacos     http://localhost:8848/nacos"
 if [[ "$MODE" != "infra" ]]; then
   echo "  nginx     http://localhost/"
   echo "  gateway   http://localhost:8080"

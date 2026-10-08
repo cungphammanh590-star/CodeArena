@@ -76,6 +76,9 @@ log/
 # 历史测试目录忽略（保留）
 /tests/
 
+# Repository-local native services downloaded by development helpers
+/.local-infra/
+
 # Helm / secrets
 **/charts/*.tgz
 secrets/

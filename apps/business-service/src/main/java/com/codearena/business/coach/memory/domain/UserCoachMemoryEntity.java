@@ -46,6 +46,24 @@ public class UserCoachMemoryEntity {
     @Column(name = "problem_id")
     private Integer problemId;
 
+    @Column(name = "memory_key", length = 160)
+    private String memoryKey;
+
+    @Column(name = "evidence_count", nullable = false)
+    private Integer evidenceCount = 1;
+
+    @Column(name = "last_evidence", columnDefinition = "TEXT")
+    private String lastEvidence;
+
+    @Column(name = "source_session_id", length = 64)
+    private String sourceSessionId;
+
+    @Column(name = "last_confirmed_at")
+    private OffsetDateTime lastConfirmedAt;
+
+    @Column(name = "expires_at")
+    private OffsetDateTime expiresAt;
+
     @Column(nullable = false)
     private Float confidence = 0.8f;
 
@@ -73,6 +91,12 @@ public class UserCoachMemoryEntity {
         }
         if (source == null || source.isBlank()) {
             source = SOURCE_COACH;
+        }
+        if (evidenceCount == null || evidenceCount < 1) {
+            evidenceCount = 1;
+        }
+        if (lastConfirmedAt == null) {
+            lastConfirmedAt = now;
         }
     }
 

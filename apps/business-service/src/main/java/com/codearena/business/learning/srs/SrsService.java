@@ -22,8 +22,10 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -86,6 +88,25 @@ public class SrsService {
             card.setDueAt(now.plusDays(1).truncatedTo(ChronoUnit.SECONDS));
         }
         srsRepository.save(card);
+    }
+
+    @Transactional
+    public Map<String, Object> review(Long userId, Integer problemId, String gradeRaw) {
+        UserProblemSrsEntity card = srsRepository.findByUserIdAndProblemId(userId, problemId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "review card not found"));
+        if (Boolean.TRUE.equals(card.getSuspended())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "review card suspended");
+        }
+        SrsScheduler.Grade grade = SrsScheduler.Grade.fromLabel(gradeRaw);
+        applyGrade(card, grade, OffsetDateTime.now());
+        srsRepository.save(card);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("ok", true);
+        result.put("problem_id", problemId);
+        result.put("grade", grade.label);
+        result.put("interval_days", card.getIntervalDays());
+        result.put("due_at", card.getDueAt().toString());
+        return result;
     }
 
     @Transactional
@@ -211,7 +232,10 @@ public class SrsService {
 
     private void enrollNew(Long userId, Integer problemId, OffsetDateTime now) {
         UserProblemSrsEntity card = newCard(userId, problemId, now);
-        writeSnapshot(card, SrsScheduler.enroll(now), now);
+        String difficulty = problemRepository.findByProblemId(problemId)
+                .map(ProblemEntity::getDifficulty)
+                .orElse("Medium");
+        writeSnapshot(card, SrsScheduler.enroll(now, difficulty), now);
         srsRepository.save(card);
     }
 

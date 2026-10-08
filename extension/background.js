@@ -160,13 +160,10 @@ async function notify(title, message, submissionId, problemId) {
 }
 
 async function openCoachPage(submissionId, problemId) {
-  const cfg = await getConfig();
-  const params = new URLSearchParams();
-  if (submissionId) params.set("submission", String(submissionId));
-  if (problemId != null && problemId !== "") params.set("problem_id", String(problemId));
-  const query = params.toString();
-  const url = query ? `${cfg.webBase}/coach?${query}` : `${cfg.webBase}/coach`;
-  await chrome.tabs.create({ url });
+  await openAuthenticatedWeb("/coach", {
+    submission: submissionId,
+    problem_id: problemId,
+  });
 }
 
 chrome.notifications.onClicked.addListener((notificationId) => {
@@ -319,12 +316,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (error.status === 401) {
         notify(
           "需要登录",
-          "提交已暂存。请打开扩展「账号登录」；登录后会自动补传到后端",
+          "提交已暂存。请打开 CodeArena 登录；登录后会自动补传到后端",
           null,
           null
         );
         try {
-          await chrome.runtime.openOptionsPage();
+          await openAuthenticatedWeb("/login");
         } catch (_e) {
           /* ignore */
         }

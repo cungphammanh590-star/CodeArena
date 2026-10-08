@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package codearena.internal.v1;
+
+option java_package = "com.codearena.business.internal.grpc";
+option java_multiple_files = true;
+
+service InternalBusiness {
+  rpc ListTools(UserRequest) returns (JsonReply);
+  rpc ExecuteTool(ToolRequest) returns (JsonReply);
+  rpc GetUserLlm(UserRequest) returns (JsonReply);
+  rpc RecordUsage(UsageRequest) returns (JsonReply);
+}
+
+service LlmHealth {
+  rpc Check(HealthRequest) returns (HealthReply);
+}
+
+message HealthRequest {}
+
+message HealthReply {
+  bool ready = 1;
+}
+
+message ToolRequest {
+  string user_public_id = 1;
+  string tool_name = 2;
+  string params_json = 3;
+  string session_id = 4;
+  int32 problem_id = 5;
+  bool has_problem_id = 6;
+  string request_id = 7;
+}
+
+message UserRequest {
+  string user_public_id = 1;
+  string request_id = 2;
+}
+
+message UsageRequest {
+  string user_public_id = 1;
+  string payload_json = 2;
+  string request_id = 3;
+}
+
+message JsonReply {
+  string json = 1;
+}

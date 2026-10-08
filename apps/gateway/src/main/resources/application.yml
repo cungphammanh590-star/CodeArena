@@ -16,11 +16,6 @@ spring:
   cloud:
     compatibility-verifier:
       enabled: false
-    nacos:
-      discovery:
-        enabled: false
-        fail-fast: false
-        register-enabled: false
     gateway:
       globalcors:
         # 扩展 options/popup 会带 Origin: chrome-extension://…；未放行时 Gateway 直接 403

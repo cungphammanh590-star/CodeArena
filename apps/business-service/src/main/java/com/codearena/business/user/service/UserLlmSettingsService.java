@@ -58,19 +58,15 @@ public class UserLlmSettingsService {
             body = Map.of();
         }
         String provider = str(body.get("provider"));
-        if (provider != null && !provider.isBlank()) {
-            provider = provider.trim().toLowerCase();
-            if (!provider.equals("ollama") && !provider.equals("api") && !provider.equals("mock")) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "provider must be ollama|api|mock");
-            }
-            row.setProvider(provider);
+        if (provider != null && !provider.isBlank() && !"api".equalsIgnoreCase(provider.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前仅支持使用个人 API Key");
         }
+        row.setProvider("api");
         String apiProvider = str(body.get("api_provider"));
-        if (apiProvider != null) {
-            row.setApiProvider(apiProvider.trim().toLowerCase());
-        } else if ("api".equals(row.getProvider()) && (row.getApiProvider() == null || row.getApiProvider().isBlank())) {
-            row.setApiProvider("deepseek");
+        if (apiProvider != null && !apiProvider.isBlank() && !"deepseek".equalsIgnoreCase(apiProvider.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前仅支持 DeepSeek API");
         }
+        row.setApiProvider("deepseek");
         String model = str(body.get("coach_model"));
         if (model != null) {
             row.setCoachModel(model.trim());
@@ -86,52 +82,36 @@ public class UserLlmSettingsService {
         if ("api".equals(row.getProvider()) && (row.getCoachModel() == null || row.getCoachModel().isBlank())) {
             row.setCoachModel("deepseek-chat");
         }
-        if ("ollama".equals(row.getProvider()) && (row.getCoachModel() == null || row.getCoachModel().isBlank())) {
-            row.setCoachModel("qwen2.5:7b-instruct-q4_K_M");
-        }
         repository.save(row);
         return toPublicLlm(row);
     }
 
     @Transactional
-    public Map<String, Object> clearKey(UserEntity user, boolean switchToOllama) {
+    public Map<String, Object> clearKey(UserEntity user) {
         UserLlmSettingsEntity row = ensure(user.getId());
         row.setApiKeyEnc("");
-        if (switchToOllama) {
-            row.setProvider("ollama");
-            row.setApiProvider("");
-            if (row.getCoachModel() == null || row.getCoachModel().isBlank() || "deepseek-chat".equals(row.getCoachModel())) {
-                row.setCoachModel("qwen2.5:7b-instruct-q4_K_M");
-            }
-        }
+        row.setProvider("api");
+        row.setApiProvider("deepseek");
+        row.setCoachModel("deepseek-chat");
         repository.save(row);
         return toPublicLlm(row);
+    }
+
+    public boolean hasApiKey(UserEntity user) {
+        return ensure(user.getId()).hasApiKey();
     }
 
     /** 用该用户已保存配置做一次极短探测（不读请求体里的临时 Key）。 */
     public Map<String, Object> probe(UserEntity user) {
         UserLlmSettingsEntity row = ensure(user.getId());
-        String provider = row.getProvider() == null ? "ollama" : row.getProvider();
-        if ("api".equals(provider) && !row.hasApiKey()) {
+        if (!row.hasApiKey()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请先保存 API Key 后再测试");
         }
-        if ("mock".equals(provider)) {
-            return Map.of(
-                    "status", "ok",
-                    "provider", "mock",
-                    "coach_model", row.getCoachModel(),
-                    "reply_preview", "ok");
-        }
         try {
-            String preview;
-            if ("api".equals(provider)) {
-                preview = probeOpenAiCompatible(row);
-            } else {
-                preview = probeOllama(row);
-            }
+            String preview = probeOpenAiCompatible(row);
             Map<String, Object> out = new LinkedHashMap<>();
             out.put("status", "ok");
-            out.put("provider", provider);
+            out.put("provider", "api");
             out.put("api_provider", row.getApiProvider());
             out.put("coach_model", row.getCoachModel());
             out.put("reply_preview", preview);
@@ -172,42 +152,23 @@ public class UserLlmSettingsService {
         return trim(resp.body(), 120);
     }
 
-    private String probeOllama(UserLlmSettingsEntity row) throws Exception {
-        String base = row.getBaseUrl() == null || row.getBaseUrl().isBlank()
-                ? "http://127.0.0.1:11434"
-                : row.getBaseUrl().replaceAll("/$", "");
-        String model = row.getCoachModel() == null || row.getCoachModel().isBlank()
-                ? "qwen2.5:7b-instruct-q4_K_M"
-                : row.getCoachModel();
-        String body =
-                "{\"model\":\""
-                        + escapeJson(model)
-                        + "\",\"messages\":[{\"role\":\"user\",\"content\":\"只回复：ok\"}],\"stream\":false}";
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(base + "/api/chat"))
-                .timeout(Duration.ofSeconds(45))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        HttpResponse<String> resp =
-                HttpClient.newHttpClient().send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() >= 400) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY, "ollama " + resp.statusCode() + ": " + trim(resp.body(), 200));
-        }
-        return trim(resp.body(), 120);
-    }
-
     private UserLlmSettingsEntity ensure(Long userId) {
         UserLlmSettingsEntity row = repository
                 .findById(userId)
                 .orElseGet(() -> {
                     UserLlmSettingsEntity created = new UserLlmSettingsEntity();
                     created.setUserId(userId);
-                    created.setProvider("ollama");
-                    created.setCoachModel("qwen2.5:7b-instruct-q4_K_M");
+                    created.setProvider("api");
+                    created.setApiProvider("deepseek");
+                    created.setCoachModel("deepseek-chat");
                     return repository.save(created);
                 });
+        if (!"api".equals(row.getProvider())) {
+            row.setProvider("api");
+            row.setApiProvider("deepseek");
+            row.setCoachModel("deepseek-chat");
+            row = repository.save(row);
+        }
         if (row.getApiKeyEnc() != null && !row.getApiKeyEnc().isBlank()
                 && !row.getApiKeyEnc().startsWith(ENC_PREFIX) && secretBytes() != null) {
             row.setApiKeyEnc(encrypt(row.getApiKeyEnc()));

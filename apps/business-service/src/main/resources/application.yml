@@ -50,11 +50,6 @@ spring:
   cloud:
     compatibility-verifier:
       enabled: false
-    nacos:
-      discovery:
-        enabled: false
-        fail-fast: false
-        register-enabled: false
 
 management:
   endpoints:
@@ -89,13 +84,14 @@ logging:
 
 codearena:
   internal:
-    # llm-service 回调 /internal/tools/** 时需携带同值 X-Internal-Token
+    # llm-service 内部 gRPC 调用需携带同值 x-internal-token metadata
     token: ${CODEARENA_INTERNAL_TOKEN:codearena-internal-dev}
   llm:
     # 可选：AES 加密用户 api_key；未设置则明文存储（仅开发）
     key-secret: ${CODEARENA_LLM_KEY_SECRET:}
     # /health 探测陪练进程（前端 coach_available）
     base-url: ${CODEARENA_LLM_URI:http://127.0.0.1:8091}
+    grpc-target: ${CODEARENA_LLM_GRPC_TARGET:127.0.0.1:9093}
   auth:
     # JWT 有效期（天）；Gateway / business 共用同一密钥
     token-ttl-days: ${CODEARENA_AUTH_TOKEN_TTL_DAYS:30}

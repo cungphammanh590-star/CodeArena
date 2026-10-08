@@ -56,3 +56,4 @@ class SmartState(TypedDict, total=False):
     awaiting_ask_user: bool  # 本回合 ask_user 触发，tools→finalize
     user_answers: List[Any]  # submit_user_reply 注入
     resume_from_ask: bool  # hydrate 恢复后强制 agent
+    prompt_policy_trace: dict  # 本回合实际装配的 policy/版本/原因/token 估算

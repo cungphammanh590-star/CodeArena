@@ -1,5 +1,6 @@
 package com.codearena.gateway.security;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,7 @@ public class RedisRateLimitGlobalFilter implements GlobalFilter, Ordered {
             "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n",
             Long.class);
     private final ReactiveStringRedisTemplate redis;
+    private final MeterRegistry meters;
     @Value("${codearena.rate-limit.enabled:true}") private boolean enabled;
     @Value("${codearena.rate-limit.default-per-minute:60}") private int defaultLimit;
     @Value("${codearena.rate-limit.stream-per-minute:20}") private int streamLimit;
@@ -30,8 +32,9 @@ public class RedisRateLimitGlobalFilter implements GlobalFilter, Ordered {
     @Value("${codearena.rate-limit.auth-per-minute:10}") private int authLimit;
     @Value("${codearena.rate-limit.export-per-minute:5}") private int exportLimit;
 
-    public RedisRateLimitGlobalFilter(ReactiveStringRedisTemplate redis) {
+    public RedisRateLimitGlobalFilter(ReactiveStringRedisTemplate redis, MeterRegistry meters) {
         this.redis = redis;
+        this.meters = meters;
     }
 
     @Override public int getOrder() { return -50; }
@@ -47,9 +50,21 @@ public class RedisRateLimitGlobalFilter implements GlobalFilter, Ordered {
         long minute = System.currentTimeMillis() / 60_000L;
         String key = "codearena:rl:" + bucket.name + ":" + clientKey(exchange.getRequest()) + ":" + minute;
         return redis.execute(SCRIPT, List.of(key), List.of("60")).next()
-                .flatMap(count -> count != null && count > bucket.limit ? limited(exchange) : chain.filter(exchange))
-                .switchIfEmpty(chain.filter(exchange))
+                .defaultIfEmpty(0L)
+                .flatMap(count -> {
+                    if (count != null && count > bucket.limit) {
+                        meters.counter("codearena.gateway.rate_limit.requests", "bucket", bucket.name, "outcome", "limited")
+                                .increment();
+                        return limited(exchange);
+                    }
+                    setRateHeaders(exchange, bucket.limit, count == null ? bucket.limit : bucket.limit - count);
+                    meters.counter("codearena.gateway.rate_limit.requests", "bucket", bucket.name, "outcome", "allowed")
+                            .increment();
+                    return chain.filter(exchange);
+                })
                 .onErrorResume(error -> {
+                    meters.counter("codearena.gateway.rate_limit.requests", "bucket", bucket.name, "outcome", "fail_open")
+                            .increment();
                     log.warn("Redis limiter unavailable; fail open: {}", error.toString());
                     return chain.filter(exchange);
                 });
@@ -65,8 +80,17 @@ public class RedisRateLimitGlobalFilter implements GlobalFilter, Ordered {
 
     private Mono<Void> limited(ServerWebExchange exchange) {
         exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
-        exchange.getResponse().getHeaders().set("Retry-After", "60");
+        exchange.getResponse().getHeaders().set("Retry-After", String.valueOf(secondsUntilNextMinute()));
         return exchange.getResponse().setComplete();
+    }
+
+    private static void setRateHeaders(ServerWebExchange exchange, int limit, long remaining) {
+        exchange.getResponse().getHeaders().set("X-RateLimit-Limit", String.valueOf(limit));
+        exchange.getResponse().getHeaders().set("X-RateLimit-Remaining", String.valueOf(Math.max(0, remaining)));
+    }
+
+    private static long secondsUntilNextMinute() {
+        return Math.max(1, 60 - (System.currentTimeMillis() / 1000L) % 60L);
     }
 
     private static String clientKey(ServerHttpRequest request) {

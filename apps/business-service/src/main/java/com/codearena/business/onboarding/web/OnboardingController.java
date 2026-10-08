@@ -4,6 +4,7 @@ import com.codearena.business.user.domain.UserEntity;
 import com.codearena.business.user.domain.UserProfileEntity;
 import com.codearena.business.user.domain.UserProfileRepository;
 import com.codearena.business.user.service.CurrentUserService;
+import com.codearena.business.user.service.UserLlmSettingsService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,6 +27,7 @@ public class OnboardingController {
 
     private final CurrentUserService currentUserService;
     private final UserProfileRepository profileRepository;
+    private final UserLlmSettingsService llmSettingsService;
 
     @GetMapping("/api/onboarding")
     public Map<String, Object> get(HttpServletRequest request) {
@@ -39,6 +41,9 @@ public class OnboardingController {
     public ResponseEntity<Map<String, Object>> save(
             HttpServletRequest request, @RequestBody Map<String, Object> body) {
         UserEntity user = currentUserService.require(request);
+        if (!llmSettingsService.hasApiKey(user)) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "请先保存并验证你的 API Key"));
+        }
         String goal = text(body, "learning_goal");
         String start = text(body, "start_mode");
         Integer minutes = number(body == null ? null : body.get("daily_minutes"));

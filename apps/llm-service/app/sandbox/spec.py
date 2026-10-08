@@ -25,6 +25,7 @@ class ExecRequest:
     command: str
     workdir: str = ""
     env: dict[str, str] = field(default_factory=dict)
+    stdin: str = ""
     limits: ResourceLimits = field(default_factory=ResourceLimits)
     argv: tuple[str, ...] = ()
 

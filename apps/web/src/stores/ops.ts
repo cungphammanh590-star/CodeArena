@@ -36,7 +36,7 @@ export const useOpsStore = defineStore("ops", () => {
   const learnMsg = ref("");
   const learnMsgKind = ref<"ok" | "err" | "">("");
 
-  const llmProvider = ref<"ollama" | "api">("ollama");
+  const llmProvider = ref<"api">("api");
   const llmModel = ref("");
   const llmApiKey = ref("");
   const llmBaseUrl = ref("");
@@ -104,7 +104,7 @@ export const useOpsStore = defineStore("ops", () => {
 
   function applyLlmForm(cfg: OpsConfig) {
     const llm = cfg.llm || {};
-    llmProvider.value = llm.provider === "api" ? "api" : "ollama";
+    llmProvider.value = "api";
     llmModel.value = llm.coach_model || "";
     modelTouched.value = false;
     llmApiKey.value = "";
@@ -142,10 +142,9 @@ export const useOpsStore = defineStore("ops", () => {
   async function saveLlm() {
     setMsg("llm", "保存中…");
     try {
-      const provider = llmProvider.value;
       const { data } = await api.post("/ops/llm/config", {
-        provider,
-        api_provider: provider === "api" ? "deepseek" : "",
+        provider: "api",
+        api_provider: "deepseek",
         coach_model: llmModel.value.trim(),
         base_url: llmBaseUrl.value.trim(),
         api_key: llmApiKey.value,
@@ -186,12 +185,11 @@ export const useOpsStore = defineStore("ops", () => {
   }
 
   async function clearLlmKey() {
-    if (!confirm("确认清除 API Key，并切回 Ollama？")) return;
+    if (!confirm("确认清除 API Key？清除后将无法使用刷题与 Nex。")) return;
     setMsg("llm", "清除中…");
     try {
       const { data } = await api.post("/ops/llm/clear-key", {
         confirm: true,
-        switch_to_ollama: true,
       });
       if (data.status !== "ok") throw new Error(data.message || "failed");
       llmApiKey.value = "";

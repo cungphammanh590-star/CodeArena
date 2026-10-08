@@ -119,6 +119,12 @@ export const useLearningStore = defineStore("learning", () => {
     await load();
   }
 
+  async function gradeProblemReview(problemId: number, grade: "again" | "hard" | "good" | "easy") {
+    const { data } = await api.post(`/review/problems/${problemId}/grade`, { grade });
+    reviewDue.value = reviewDue.value.filter((item) => (item.problem_id || item.id) !== problemId);
+    return data;
+  }
+
   return {
     listMode,
     kgMode,
@@ -136,5 +142,6 @@ export const useLearningStore = defineStore("learning", () => {
     load,
     save,
     unmaster,
+    gradeProblemReview,
   };
 });

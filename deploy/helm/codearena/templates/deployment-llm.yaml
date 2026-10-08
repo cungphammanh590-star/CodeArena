@@ -25,7 +25,13 @@ spec:
           ports:
             - containerPort: {{ .Values.llm.service.port }}
               name: http
+            - containerPort: {{ .Values.llm.service.grpcPort }}
+              name: grpc
           env:
+            - name: LLM_GRPC_HOST
+              value: "0.0.0.0"
+            - name: BUSINESS_GRPC_TARGET
+              value: {{ printf "%s-business:%v" (include "codearena.fullname" .) .Values.business.service.grpcPort | quote }}
             {{- range $k, $v := .Values.llm.env }}
             - name: {{ $k }}
               value: {{ $v | quote }}
@@ -52,4 +58,7 @@ spec:
     - port: {{ .Values.llm.service.port }}
       targetPort: http
       name: http
+    - port: {{ .Values.llm.service.grpcPort }}
+      targetPort: grpc
+      name: grpc
 {{- end }}

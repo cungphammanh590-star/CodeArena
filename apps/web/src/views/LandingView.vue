@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { fetchMe, getAccessToken, getUserDisplayName } from "@/api/client";
 
 const stages = [
   {
@@ -26,10 +27,24 @@ const stages = [
 ];
 
 const active = ref(0);
+const signedIn = ref(Boolean(getAccessToken()));
+const userName = ref(getUserDisplayName() || (signedIn.value ? "已登录" : ""));
 const current = computed(() => stages[active.value]);
 function choose(index: number) {
   active.value = index;
 }
+
+onMounted(async () => {
+  if (!signedIn.value) return;
+  try {
+    const user = (await fetchMe())?.user || {};
+    userName.value = user.display_name || user.username || user.public_id || "已登录";
+  } catch {
+    // 401 会由响应拦截器清理会话；网络故障时保留本地登录状态和上次用户名。
+    signedIn.value = Boolean(getAccessToken());
+    if (!signedIn.value) userName.value = "";
+  }
+});
 </script>
 
 <template>
@@ -41,8 +56,13 @@ function choose(index: number) {
         <RouterLink to="/demo">体验演示</RouterLink>
       </nav>
       <div class="landing-actions">
-        <RouterLink class="nav-login" to="/login">登录</RouterLink>
-        <RouterLink class="btn-primary" to="/login?mode=register">开始学习</RouterLink>
+        <RouterLink v-if="signedIn" class="nav-login user-name" to="/dashboard">
+          {{ userName }}
+        </RouterLink>
+        <RouterLink v-else class="nav-login" to="/login">登录</RouterLink>
+        <RouterLink class="btn-primary" :to="signedIn ? '/dashboard' : '/login?mode=register'">
+          {{ signedIn ? "进入学习空间" : "开始学习" }}
+        </RouterLink>
       </div>
     </header>
 
@@ -54,7 +74,9 @@ function choose(index: number) {
           CodeArena 连接你的代码练习、知识笔记与复习节奏。Nex 记得你卡在哪里，帮你在需要时想清楚，而不是替你作答。
         </p>
         <div class="hero-actions">
-          <RouterLink class="btn-primary" to="/login?mode=register">创建学习空间</RouterLink>
+          <RouterLink class="btn-primary" :to="signedIn ? '/dashboard' : '/login?mode=register'">
+            {{ signedIn ? "继续学习" : "创建学习空间" }}
+          </RouterLink>
           <RouterLink class="btn-secondary" to="/demo">先看演示</RouterLink>
         </div>
         <p class="fine-print">平台托管学习服务；模型可选用你自己的 API Key。</p>
@@ -130,6 +152,7 @@ function choose(index: number) {
 .landing-brand { color: var(--ink); font-size: 19px; font-weight: 700; letter-spacing: -.04em; text-decoration: none; }
 .landing-nav nav { display: flex; align-items: center; gap: 20px; margin-left: auto; }
 .landing-nav nav a, .nav-login { color: var(--muted); font-size: 14px; text-decoration: none; }
+.user-name { max-width: 144px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); }
 .landing-nav nav a:hover, .nav-login:hover { color: var(--accent); text-decoration: none; }
 .landing-actions, .hero-actions { display: flex; align-items: center; gap: 12px; }
 .landing-nav :deep(.btn-primary), .hero-actions :deep(.btn-primary), .hero-actions :deep(.btn-secondary), .demo-body .btn-primary { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }

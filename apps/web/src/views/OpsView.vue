@@ -322,30 +322,20 @@ onMounted(() => {
     <section class="section-card ops-section">
       <h2>Nex 模型</h2>
       <p class="hint">
-        可选 Ollama 或 DeepSeek。API Key <strong>按用户</strong>保存在 business-service；对话时 llm-service 只用当前用户的 Key。
+        使用你自己的 DeepSeek API Key。Key <strong>按用户</strong>保存在 business-service；对话时 llm-service 只使用当前用户的 Key。
       </p>
-      <div class="radio-row">
-        <label>
-          <input v-model="llmProvider" type="radio" value="ollama" />
-          Ollama
-        </label>
-        <label>
-          <input v-model="llmProvider" type="radio" value="api" />
-          DeepSeek API
-        </label>
-      </div>
       <div class="row" style="margin-bottom: 10px">
         <label class="field">
           <span>模型名</span>
           <input
             v-model="llmModel"
             type="text"
-            placeholder="qwen2.5:7b-instruct-q4_K_M / deepseek-chat"
+            placeholder="deepseek-chat"
             @input="ops.modelTouched = true"
           />
         </label>
       </div>
-      <div v-if="llmProvider === 'api'">
+      <div>
         <div class="row" style="margin-bottom: 10px">
           <label class="field">
             <span>API Key</span>
@@ -404,7 +394,7 @@ onMounted(() => {
         <button type="button" class="ghost-link" @click="loadUsage">刷新</button>
       </div>
       <p class="hint">
-        记录本账号调用云端/本地模型的次数与 token（不展示 Key）。和 Nex 对话一轮后会出现在这里。
+        记录本账号调用 DeepSeek API 的次数与 token（不展示 Key）。和 Nex 对话一轮后会出现在这里。
       </p>
       <div v-if="usageSummary" class="usage-metrics">
         <div class="usage-card">

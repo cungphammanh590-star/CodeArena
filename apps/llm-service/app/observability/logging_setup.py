@@ -18,7 +18,20 @@ class JsonFormatter(logging.Formatter):
             "service": "llm-service",
             "message": record.getMessage(),
         }
-        for key in ("request_id", "trace_id", "tool_name", "session_id", "duration_ms"):
+        for key in (
+            "request_id",
+            "trace_id",
+            "tool_name",
+            "session_id",
+            "duration_ms",
+            "prompt_policies",
+            "prompt_policy_versions",
+            "prompt_estimated_tokens",
+            "event_type",
+            "node",
+            "status",
+            "event_data",
+        ):
             val = getattr(record, key, None)
             if val is not None and val != "":
                 payload[key] = val
@@ -46,6 +59,10 @@ def log_extra(
     tool_name: str = "",
     session_id: str = "",
     duration_ms: Optional[float] = None,
+    event_type: str = "",
+    node: str = "",
+    status: str = "",
+    event_data: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     extra: dict[str, Any] = {}
     if request_id:
@@ -56,4 +73,12 @@ def log_extra(
         extra["session_id"] = session_id
     if duration_ms is not None:
         extra["duration_ms"] = round(duration_ms, 2)
+    if event_type:
+        extra["event_type"] = event_type
+    if node:
+        extra["node"] = node
+    if status:
+        extra["status"] = status
+    if event_data:
+        extra["event_data"] = event_data
     return extra

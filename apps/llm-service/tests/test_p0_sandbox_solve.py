@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 
 from app.coach.local_tools import execute_local_tool, format_user_answers, tool_specs_for_state
 from app.coach.solve.session import SolveSession, parse_step_goals
-from app.sandbox.backends import RestrictedSubprocessBackend
-from app.sandbox.service import SandboxService, SandboxSettings, reset_sandbox_service
+from app.sandbox.backends import BubblewrapBackend, RestrictedSubprocessBackend
+from app.sandbox.service import SandboxService, SandboxSettings, build_backend, reset_sandbox_service
 from app.sandbox.spec import ExecRequest, ResourceLimits
 from app.services.tool_client import TOOL_SPECS
 
@@ -48,6 +49,16 @@ def test_subprocess_runs_python(sandbox: SandboxService, tmp_path: Path) -> None
     assert "2" in result.stdout
 
 
+def test_bwrap_backend_is_selectable_and_fails_clearly_without_binary(tmp_path: Path) -> None:
+    backend = build_backend(SandboxSettings(backend="bwrap", data_dir=str(tmp_path)))
+    assert isinstance(backend, BubblewrapBackend)
+    if shutil.which("bwrap") is None:
+        result = backend.exec(
+            ExecRequest.of_argv(["python3", "main.py"], workdir=str(tmp_path))
+        )
+        assert "bwrap not installed" in result.error
+
+
 def test_code_execution_local_tool(sandbox: SandboxService) -> None:
     out = execute_local_tool(
         tool_name="code_execution",
@@ -60,6 +71,48 @@ def test_code_execution_local_tool(sandbox: SandboxService) -> None:
     assert payload.get("exit_code") == 0
     assert "hi" in (payload.get("stdout_preview") or "")
     assert out.sse_events and out.sse_events[0]["type"] == "code_result"
+
+
+def test_code_execution_passes_stdin(sandbox: SandboxService) -> None:
+    out = execute_local_tool(
+        tool_name="code_execution",
+        params={"language": "python", "code": "print(input().upper())\n", "stdin": "hello\n"},
+        state={"user_public_id": "usr_test", "session_id": "sess-stdin"},
+        sandbox=sandbox,
+    )
+    assert out is not None
+    payload = json.loads(out.content)
+    assert payload["ok"] is True
+    assert "HELLO" in payload["stdout_preview"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runtime unavailable")
+def test_code_execution_javascript(sandbox: SandboxService) -> None:
+    out = execute_local_tool(
+        tool_name="code_execution",
+        params={"language": "javascript", "code": "console.log(6 * 7)\n"},
+        state={"user_public_id": "usr_test", "session_id": "sess-js"},
+        sandbox=sandbox,
+    )
+    assert out is not None
+    payload = json.loads(out.content)
+    assert payload["ok"] is True
+    assert payload["language"] == "javascript"
+    assert "42" in payload["stdout_preview"]
+
+
+def test_code_execution_rejects_go(sandbox: SandboxService) -> None:
+    out = execute_local_tool(
+        tool_name="code_execution",
+        params={"language": "go", "code": "package main"},
+        state={"user_public_id": "usr_test", "session_id": "sess-go"},
+        sandbox=sandbox,
+    )
+    assert out is not None
+    payload = json.loads(out.content)
+    assert payload["ok"] is False
+    assert "unsupported language=go" in payload["error"]
+    assert "supported: python/javascript/java/cpp" in payload["error"]
 
 
 def test_solve_plan_finish_all_done() -> None:

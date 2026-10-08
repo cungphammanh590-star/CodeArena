@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-import httpx
+import grpc
 
 from app.config import Settings, get_settings
+from app.services import internal_rpc
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_MODEL = "deepseek-chat"
-OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 API_TIMEOUT_SECONDS = 45.0
 # 拉用户配置是轻量内网 GET，不应跟 LLM 推理共用 60s 超时
 SETTINGS_FETCH_TIMEOUT_SECONDS = 8.0
@@ -21,37 +21,21 @@ def fetch_user_llm_settings(
     user_public_id: str,
     settings: Optional[Settings] = None,
 ) -> dict[str, Any]:
-    """从 business-service 内网接口拉取该用户的 LLM 配置（含 api_key）。"""
+    """从 business-service 内部 gRPC 拉取该用户的 LLM 配置（含 api_key）。"""
     cfg = settings or get_settings()
-    url = f"{cfg.business_internal_url.rstrip('/')}/internal/users/llm"
-    headers = {
-        "X-Internal-Token": cfg.internal_tool_token,
-        "X-User-Public-Id": user_public_id or "",
-    }
     try:
-        # trust_env=False：避免本机 HTTP(S)_PROXY/ALL_PROXY 把 127.0.0.1 打进坏代理
-        with httpx.Client(
-            timeout=SETTINGS_FETCH_TIMEOUT_SECONDS,
-            trust_env=False,
-        ) as client:
-            resp = client.get(url, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.TimeoutException as exc:
+        data = internal_rpc.get_user_llm(cfg, user_public_id, SETTINGS_FETCH_TIMEOUT_SECONDS)
+    except grpc.RpcError as exc:
+        if exc.code() == grpc.StatusCode.UNAVAILABLE:
+            raise RuntimeError(
+                "暂时连不上配置服务，请稍后再试。"
+                "若问题持续，请确认本机服务已启动。"
+            ) from exc
         raise RuntimeError(
             "暂时读不到你的模型配置，请稍后再试。"
             "若刚改过设置，可到维护台确认后重试。"
         ) from exc
-    except httpx.ConnectError as exc:
-        raise RuntimeError(
-            "暂时连不上配置服务，请稍后再试。"
-            "若问题持续，请确认本机服务已启动。"
-        ) from exc
-    except httpx.HTTPStatusError as exc:
-        raise RuntimeError(
-            "暂时读不到你的模型配置，请稍后再试。"
-        ) from exc
-    except httpx.HTTPError as exc:
+    except (ValueError, OSError) as exc:
         raise RuntimeError(
             "暂时读不到你的模型配置，请稍后再试。"
         ) from exc
@@ -62,11 +46,11 @@ def fetch_user_llm_settings(
             "api_key": cfg.llm_api_key,
             "base_url": cfg.llm_base_url,
             "coach_model": cfg.llm_coach_model,
-            "api_provider": "deepseek" if cfg.llm_provider == "api" else "",
+            "api_provider": "deepseek",
         }
     return {
-        "provider": str(llm.get("provider") or "ollama").strip().lower(),
-        "api_provider": str(llm.get("api_provider") or "").strip().lower(),
+        "provider": str(llm.get("provider") or "api").strip().lower(),
+        "api_provider": str(llm.get("api_provider") or "deepseek").strip().lower(),
         "api_key": str(llm.get("api_key") or "").strip(),
         "base_url": str(llm.get("base_url") or "").strip(),
         "coach_model": str(llm.get("coach_model") or "").strip(),
@@ -76,32 +60,10 @@ def fetch_user_llm_settings(
 
 
 def build_chat_model(llm: dict[str, Any]):
-    provider = str(llm.get("provider") or "ollama").strip().lower()
-    if provider == "mock":
-        raise RuntimeError("当前是演示模式，无法驱动 Nex。请到维护台选择本地模型或云端 API。")
-    if provider == "ollama":
-        return _build_ollama(llm)
+    provider = str(llm.get("provider") or "api").strip().lower()
     if provider == "api":
         return _build_api(llm)
-    raise RuntimeError("模型配置无效。请到维护台选择本地模型或云端 API。")
-
-
-def _build_ollama(llm: dict[str, Any]):
-    try:
-        from langchain_ollama import ChatOllama
-    except ImportError as exc:
-        raise RuntimeError(
-            "本地模型组件未安装完成，暂时无法使用 Nex。请联系管理员或稍后再试。"
-        ) from exc
-    model = str(llm.get("coach_model") or "").strip() or "qwen2.5:7b-instruct-q4_K_M"
-    base = str(llm.get("base_url") or "").strip() or OLLAMA_BASE_URL
-    return ChatOllama(
-        model=model,
-        temperature=0.4,
-        base_url=base,
-        client_kwargs={"timeout": API_TIMEOUT_SECONDS, "trust_env": False},
-        async_client_kwargs={"timeout": API_TIMEOUT_SECONDS, "trust_env": False},
-    )
+    raise RuntimeError("模型配置无效。请先配置个人 DeepSeek API Key。")
 
 
 def _build_api(llm: dict[str, Any]):
@@ -110,7 +72,7 @@ def _build_api(llm: dict[str, Any]):
         raise RuntimeError("暂仅支持 DeepSeek 云端 API，请到维护台调整配置。")
     api_key = str(llm.get("api_key") or "").strip()
     if not api_key:
-        raise RuntimeError("未配置 API Key。请到维护台为当前用户填写后重试。")
+        raise RuntimeError("未配置 API Key。请先填写并验证你的 DeepSeek API Key。")
     try:
         from langchain_openai import ChatOpenAI
     except ImportError as exc:

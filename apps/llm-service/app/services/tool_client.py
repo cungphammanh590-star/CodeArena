@@ -1,7 +1,7 @@
 """LangGraph tool specs + Java executor callback client.
 
 LLM 只决策 tool_name/params；数据访问一律回调 business-service
-``POST /internal/tools/exec``（编排器-执行器）。
+通过内部 gRPC 调用 business-service（编排器-执行器）。
 """
 
 from __future__ import annotations
@@ -11,12 +11,10 @@ import logging
 import time
 from typing import Any, Optional
 
-import httpx
-
 from app.config import Settings, get_settings
 from app.observability.logging_setup import log_extra
 from app.observability.request_context import get_request_id
-from app.observability.skywalking_agent import tool_span
+from app.services import internal_rpc
 
 logger = logging.getLogger(__name__)
 
@@ -372,6 +370,18 @@ JAVA_TOOL_SPECS: list[dict[str, Any]] = [
                     "source": {"type": "string", "description": "user|coach|system"},
                     "problem_id": {"type": "integer"},
                     "confidence": {"type": "number"},
+                    "memory_key": {
+                        "type": "string",
+                        "description": "稳定语义键；同一用户+类型+键会巩固更新而非重复追加",
+                    },
+                    "evidence": {
+                        "type": "string",
+                        "description": "支持该结论的最近一次可观察证据",
+                    },
+                    "ttl_days": {
+                        "type": "integer",
+                        "description": "可选有效期；临时状态建议设置，目标和明确偏好可省略",
+                    },
                 },
                 "required": ["content"],
                 "additionalProperties": False,
@@ -471,14 +481,15 @@ LOCAL_TOOL_SPECS: list[dict[str, Any]] = [
             "name": "code_execution",
             "description": (
                 "在安全沙箱中运行短代码片段以验证思路或样例。"
-                "仅支持 python；禁止输出完整可提交题解；不要读取库内 AC 源码。"
+                "支持 Python、JavaScript、Java、C++；禁止输出完整可提交题解；不要读取库内 AC 源码。"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "language": {
                         "type": "string",
-                        "description": "python（P0）",
+                        "enum": ["python", "javascript", "java", "cpp"],
+                        "description": "运行语言",
                     },
                     "code": {"type": "string", "description": "要执行的源码"},
                     "stdin": {"type": "string", "description": "可选标准输入"},
@@ -622,17 +633,6 @@ class JavaToolClient:
     def __init__(self, settings: Optional[Settings] = None) -> None:
         self.settings = settings or get_settings()
 
-    def _headers(self, user_public_id: str) -> dict[str, str]:
-        headers = {
-            "Content-Type": "application/json",
-            "X-Internal-Token": self.settings.internal_tool_token,
-            "X-User-Public-Id": user_public_id or "",
-        }
-        rid = get_request_id()
-        if rid:
-            headers["X-Request-Id"] = rid
-        return headers
-
     async def exec_tool(
         self,
         *,
@@ -644,50 +644,41 @@ class JavaToolClient:
     ) -> dict[str, Any]:
         if tool_name in LOCAL_TOOL_NAMES:
             raise ValueError(f"{tool_name} is local-only; do not call Java")
-        url = f"{self.settings.business_internal_url.rstrip('/')}/internal/tools/exec"
-        payload = {
-            "tool_name": tool_name,
-            "params": params or {},
-            "session_id": session_id,
-            "problem_id": problem_id,
-        }
         t0 = time.perf_counter()
-        with tool_span(tool_name, session_id=session_id):
-            try:
-                async with httpx.AsyncClient(
-                    timeout=self.settings.llm_timeout_seconds,
-                    trust_env=False,
-                ) as client:
-                    resp = await client.post(
-                        url, json=payload, headers=self._headers(user_public_id)
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
-                dur = (time.perf_counter() - t0) * 1000
-                logger.info(
-                    "tool ok name=%s",
-                    tool_name,
-                    extra=log_extra(
-                        request_id=get_request_id(),
-                        tool_name=tool_name,
-                        session_id=session_id,
-                        duration_ms=dur,
-                    ),
-                )
-                return data if isinstance(data, dict) else {"ok": False, "note": "invalid response"}
-            except Exception:
-                dur = (time.perf_counter() - t0) * 1000
-                logger.exception(
-                    "tool failed name=%s",
-                    tool_name,
-                    extra=log_extra(
-                        request_id=get_request_id(),
-                        tool_name=tool_name,
-                        session_id=session_id,
-                        duration_ms=dur,
-                    ),
-                )
-                raise
+        try:
+            data = await internal_rpc.execute_tool_async(
+                self.settings,
+                tool_name=tool_name,
+                params=params or {},
+                session_id=session_id,
+                problem_id=problem_id,
+                user_public_id=user_public_id,
+            )
+            dur = (time.perf_counter() - t0) * 1000
+            logger.info(
+                "tool ok name=%s",
+                tool_name,
+                extra=log_extra(
+                    request_id=get_request_id(),
+                    tool_name=tool_name,
+                    session_id=session_id,
+                    duration_ms=dur,
+                ),
+            )
+            return data if isinstance(data, dict) else {"ok": False, "note": "invalid response"}
+        except Exception:
+            dur = (time.perf_counter() - t0) * 1000
+            logger.exception(
+                "tool failed name=%s",
+                tool_name,
+                extra=log_extra(
+                    request_id=get_request_id(),
+                    tool_name=tool_name,
+                    session_id=session_id,
+                    duration_ms=dur,
+                ),
+            )
+            raise
 
     def exec_tool_sync(
         self,
@@ -717,47 +708,38 @@ class JavaToolClient:
                 return local.content
             raise ValueError(f"local tool {tool_name} failed to execute")
 
-        url = f"{self.settings.business_internal_url.rstrip('/')}/internal/tools/exec"
-        payload = {
-            "tool_name": tool_name,
-            "params": params or {},
-            "session_id": session_id,
-            "problem_id": problem_id,
-        }
         t0 = time.perf_counter()
-        with tool_span(tool_name, session_id=session_id):
-            try:
-                with httpx.Client(
-                    timeout=self.settings.llm_timeout_seconds,
-                    trust_env=False,
-                ) as client:
-                    resp = client.post(
-                        url, json=payload, headers=self._headers(user_public_id)
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
-                dur = (time.perf_counter() - t0) * 1000
-                logger.info(
-                    "tool ok name=%s",
-                    tool_name,
-                    extra=log_extra(
-                        request_id=get_request_id(),
-                        tool_name=tool_name,
-                        session_id=session_id,
-                        duration_ms=dur,
-                    ),
-                )
-                return json.dumps(data, ensure_ascii=False)
-            except Exception:
-                dur = (time.perf_counter() - t0) * 1000
-                logger.exception(
-                    "tool failed name=%s",
-                    tool_name,
-                    extra=log_extra(
-                        request_id=get_request_id(),
-                        tool_name=tool_name,
-                        session_id=session_id,
-                        duration_ms=dur,
-                    ),
-                )
-                raise
+        try:
+            data = internal_rpc.execute_tool_sync(
+                self.settings,
+                tool_name=tool_name,
+                params=params or {},
+                session_id=session_id,
+                problem_id=problem_id,
+                user_public_id=user_public_id,
+            )
+            dur = (time.perf_counter() - t0) * 1000
+            logger.info(
+                "tool ok name=%s",
+                tool_name,
+                extra=log_extra(
+                    request_id=get_request_id(),
+                    tool_name=tool_name,
+                    session_id=session_id,
+                    duration_ms=dur,
+                ),
+            )
+            return json.dumps(data, ensure_ascii=False)
+        except Exception:
+            dur = (time.perf_counter() - t0) * 1000
+            logger.exception(
+                "tool failed name=%s",
+                tool_name,
+                extra=log_extra(
+                    request_id=get_request_id(),
+                    tool_name=tool_name,
+                    session_id=session_id,
+                    duration_ms=dur,
+                ),
+            )
+            raise

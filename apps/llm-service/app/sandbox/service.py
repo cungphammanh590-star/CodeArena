@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 from app.config import Settings, get_settings
-from app.sandbox.backends import RestrictedSubprocessBackend, SandboxBackend
+from app.sandbox.backends import BubblewrapBackend, RestrictedSubprocessBackend, SandboxBackend
 from app.sandbox.quota import QuotaExceeded, UserExecQuota
 from app.sandbox.spec import ExecRequest, ExecResult
 
@@ -41,6 +41,8 @@ class SandboxSettings:
 def build_backend(settings: SandboxSettings) -> SandboxBackend | None:
     if settings.backend in {"", "off", "none", "disabled"}:
         return None
+    if settings.backend in {"bwrap", "bubblewrap"}:
+        return BubblewrapBackend()
     return RestrictedSubprocessBackend(isolate_network=settings.backend in {"unshare", "isolated"})
 
 

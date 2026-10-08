@@ -1,6 +1,6 @@
 # CodeArena — full stack
-# Default profile: infra + apps (nginx, gateway, business, llm, postgres, redis, nacos)
-# Observability profile: prometheus, grafana, loki, skywalking
+# Default profile: infra + apps (nginx, gateway, business, llm, postgres, redis, qdrant)
+# Observability profile: prometheus, grafana, loki, promtail
 #
 #   docker compose up -d
 #   docker compose --profile observability up -d
@@ -60,23 +60,6 @@ services:
       timeout: 3s
       retries: 5
 
-  nacos:
-    image: nacos/nacos-server:v2.3.2
-    container_name: codearena-nacos
-    restart: unless-stopped
-    environment:
-      MODE: standalone
-      PREFER_HOST_MODE: hostname
-      JVM_XMS: 256m
-      JVM_XMX: 512m
-      NACOS_AUTH_ENABLE: "false"
-    ports:
-      - "${NACOS_PORT:-8848}:8848"
-      - "9848:9848"
-    volumes:
-      - codearena_nacos_data:/home/nacos/data
-    # Optional: mount ./deploy/nacos/application.properties
-
   llm-service:
     build:
       context: ./apps/llm-service
@@ -84,29 +67,27 @@ services:
     container_name: codearena-llm
     restart: unless-stopped
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
+      LLM_PROVIDER: api
+      LLM_BASE_URL: https://api.deepseek.com
       LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_COACH_MODEL: ${LLM_COACH_MODEL:-qwen2.5:7b-instruct-q4_K_M}
+      LLM_COACH_MODEL: deepseek-chat
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       POSTGRES_DSN: postgresql://${POSTGRES_USER:-codearena}:${POSTGRES_PASSWORD:-codearena}@postgres:5432/${POSTGRES_DB:-codearena}
-      NACOS_SERVER_ADDR: nacos:8848
-      BUSINESS_INTERNAL_URL: ${BUSINESS_INTERNAL_URL:-http://business-service:8090}
+      BUSINESS_GRPC_TARGET: business-service:9092
+      LLM_GRPC_HOST: 0.0.0.0
       INTERNAL_TOOL_TOKEN: ${CODEARENA_INTERNAL_TOKEN:-codearena-internal-dev}
       CHECKPOINT_BACKEND: ${CHECKPOINT_BACKEND:-auto}
       CHECKPOINT_TTL_SECONDS: ${CHECKPOINT_TTL_SECONDS:-604800}
-      OBSERVABILITY_SKYWALKING: ${OBSERVABILITY_SKYWALKING:-false}
-      SKYWALKING_COLLECTOR: ${SKYWALKING_COLLECTOR:-skywalking-oap:11800}
-      SKYWALKING_SERVICE_NAME: llm-service
-      LANGFUSE_TRACING: ${LANGFUSE_TRACING:-false}
-      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-codearena-local}
-      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-codearena-local-secret}
-      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://host.docker.internal:3030}
+      SANDBOX_BACKEND: ${SANDBOX_BACKEND:-subprocess}
+      SANDBOX_TIMEOUT_S: ${SANDBOX_TIMEOUT_S:-10}
+      SANDBOX_MEMORY_MB: ${SANDBOX_MEMORY_MB:-256}
+      SANDBOX_MAX_RUNS_PER_MINUTE: ${SANDBOX_MAX_RUNS_PER_MINUTE:-10}
       LOG_JSON: "true"
     # 不向宿主机映射端口：仅 Docker 网络内可达，经 Gateway/Nginx 访问。
     # 调试直连时可临时加 ports: ["8091:8091"]，或用本机 make llm。
     expose:
       - "8091"
+      - "9093"
     depends_on:
       postgres:
         condition: service_healthy
@@ -135,28 +116,29 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       CODEARENA_INTERNAL_TOKEN: ${CODEARENA_INTERNAL_TOKEN:-codearena-internal-dev}
+      CODEARENA_LLM_URI: http://llm-service:8091
+      CODEARENA_LLM_GRPC_TARGET: llm-service:9093
       CODEARENA_LLM_KEY_SECRET: ${CODEARENA_LLM_KEY_SECRET:-}
       CODEARENA_SQL_LOG_LEVEL: ${CODEARENA_SQL_LOG_LEVEL:-INFO}
       CODEARENA_KNOWLEDGE_ENABLED: ${CODEARENA_KNOWLEDGE_ENABLED:-true}
-      CODEARENA_QDRANT_URL: ${CODEARENA_QDRANT_URL:-http://qdrant:6333}
+      CODEARENA_QDRANT_URL: http://qdrant:6333
       CODEARENA_QDRANT_COLLECTION: ${CODEARENA_QDRANT_COLLECTION:-leetmate_user_kb}
       CODEARENA_EMBEDDING_PROVIDER: ${CODEARENA_EMBEDDING_PROVIDER:-mock}
       CODEARENA_EMBEDDING_DIM: ${CODEARENA_EMBEDDING_DIM:-384}
       CODEARENA_EMBEDDING_MODEL: ${CODEARENA_EMBEDDING_MODEL:-mock-hash-v1}
       CODEARENA_EMBEDDING_VERSION: ${CODEARENA_EMBEDDING_VERSION:-1}
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       CODEARENA_EMBEDDING_HTTP_URL: ${CODEARENA_EMBEDDING_HTTP_URL:-}
       CODEARENA_EMBEDDING_HTTP_API_KEY: ${CODEARENA_EMBEDDING_HTTP_API_KEY:-}
       CODEARENA_KNOWLEDGE_STORAGE_DIR: ${CODEARENA_KNOWLEDGE_STORAGE_DIR:-/data/knowledge}
       JAVA_TOOL_OPTIONS: ${BUSINESS_JAVA_TOOL_OPTIONS:-}
-      SW_AGENT_NAME: business-service
-      SW_AGENT_COLLECTOR: skywalking-oap:11800
     volumes:
-      - ./deploy/observability/skywalking/agent:/skywalking:ro
       - codearena_knowledge_data:/data/knowledge
     # 不向宿主机映射端口：仅 Docker 网络内可达，经 Gateway/Nginx 访问。
     # 调试直连时可临时加 ports: ["8090:8090"]，或用本机 make business。
     expose:
       - "8090"
+      - "9092"
     depends_on:
       postgres:
         condition: service_healthy
@@ -182,11 +164,9 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       CODEARENA_BUSINESS_URI: http://business-service:8090
       CODEARENA_LLM_URI: http://llm-service:8091
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       JAVA_TOOL_OPTIONS: ${GATEWAY_JAVA_TOOL_OPTIONS:-}
-      SW_AGENT_NAME: gateway
-      SW_AGENT_COLLECTOR: skywalking-oap:11800
-    volumes:
-      - ./deploy/observability/skywalking/agent:/skywalking:ro
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
@@ -254,6 +234,7 @@ services:
       - "${GRAFANA_PORT:-3000}:3000"
     volumes:
       - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/provisioning/dashboards:/var/lib/grafana/dashboards:ro
       - codearena_grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
@@ -270,31 +251,6 @@ services:
       - ./deploy/monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
       - codearena_loki_data:/loki
     command: ["-config.file=/etc/loki/local-config.yaml"]
-
-  skywalking-oap:
-    profiles: ["observability"]
-    image: apache/skywalking-oap-server:9.7.0
-    container_name: codearena-skywalking-oap
-    restart: unless-stopped
-    environment:
-      SW_STORAGE: h2
-      SW_HEALTH_CHECKER: default
-      JAVA_OPTS: "-Xms256m -Xmx512m"
-    ports:
-      - "${SKYWALKING_GRPC_PORT:-11800}:11800"
-      - "${SKYWALKING_HTTP_PORT:-12800}:12800"
-
-  skywalking-ui:
-    profiles: ["observability"]
-    image: apache/skywalking-ui:9.7.0
-    container_name: codearena-skywalking-ui
-    restart: unless-stopped
-    environment:
-      SW_OAP_ADDRESS: http://skywalking-oap:12800
-    ports:
-      - "${SKYWALKING_UI_PORT:-8088}:8080"
-    depends_on:
-      - skywalking-oap
 
   promtail:
     profiles: ["observability"]
@@ -315,7 +271,6 @@ volumes:
   codearena_redis_data:
   codearena_qdrant_data:
   codearena_knowledge_data:
-  codearena_nacos_data:
   codearena_prometheus_data:
   codearena_grafana_data:
   codearena_loki_data:

@@ -9,12 +9,11 @@ from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
-from app.observability.langfuse_setup import configure_langfuse
 from app.observability.logging_setup import setup_logging
 from app.observability.request_context import RequestIdMiddleware
-from app.observability.skywalking_agent import try_start_skywalking
 from app.routers import coach, health
 from app.services.llm_client import shutdown_llm_client
+from app.services.grpc_health import start_grpc_health
 
 
 class MirrorOriginCORS(BaseHTTPMiddleware):
@@ -42,19 +41,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     if settings.log_json:
         setup_logging(settings.log_level)
-    configure_langfuse(
-        enabled=settings.langfuse_tracing,
-        public_key=settings.langfuse_public_key,
-        secret_key=settings.langfuse_secret_key,
-        host=settings.langfuse_host,
-    )
-    if settings.observability_skywalking:
-        try_start_skywalking(
-            service_name=settings.skywalking_service_name,
-            collector=settings.skywalking_collector,
-        )
-    yield
-    await shutdown_llm_client()
+    grpc_health, _ = start_grpc_health(settings)
+    try:
+        yield
+    finally:
+        grpc_health.stop(grace=1).wait()
+        await shutdown_llm_client()
 
 
 def create_app() -> FastAPI:

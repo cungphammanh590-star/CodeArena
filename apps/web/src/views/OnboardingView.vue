@@ -10,6 +10,9 @@ const minutes = ref(30);
 const startMode = ref("path");
 const busy = ref(false);
 const error = ref("");
+const apiKey = ref("");
+const hasApiKey = ref(false);
+const keyHint = ref("正在检查 API Key…");
 const extensionState = ref<"unknown" | "missing" | "ready" | "login">("unknown");
 const extensionPending = ref(0);
 let probeTimer: number | undefined;
@@ -29,7 +32,23 @@ function probeExtension() {
   }, 900);
 }
 
-onMounted(() => { window.addEventListener("message", onExtensionMessage); probeExtension(); });
+async function loadApiKeyStatus() {
+  try {
+    const { data } = await api.get("/users/me/llm");
+    hasApiKey.value = Boolean(data?.llm?.has_api_key);
+    keyHint.value = hasApiKey.value
+      ? `已保存 API Key：${data?.llm?.api_key || "***"}`
+      : "需要你自己的 DeepSeek API Key，平台不会提供共享 Key。";
+  } catch (err) {
+    keyHint.value = toUserMessage(err, "暂时读取不到 API Key 状态");
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("message", onExtensionMessage);
+  probeExtension();
+  void loadApiKeyStatus();
+});
 onUnmounted(() => { window.removeEventListener("message", onExtensionMessage); if (probeTimer) window.clearTimeout(probeTimer); });
 
 const goals = [
@@ -52,6 +71,23 @@ async function complete() {
   error.value = "";
   busy.value = true;
   try {
+    const typedKey = apiKey.value.trim();
+    if (!hasApiKey.value && !typedKey) {
+      error.value = "请先填写你的 DeepSeek API Key";
+      return;
+    }
+    if (typedKey) {
+      await api.post("/users/me/llm/config", {
+        provider: "api",
+        api_provider: "deepseek",
+        coach_model: "deepseek-chat",
+        base_url: "https://api.deepseek.com",
+        api_key: typedKey,
+      });
+      apiKey.value = "";
+      hasApiKey.value = true;
+    }
+    await api.post("/users/me/llm/test", {});
     await api.post("/onboarding", {
       learning_goal: goal.value,
       daily_minutes: minutes.value,
@@ -72,7 +108,16 @@ async function complete() {
       <RouterLink class="brand" to="/">CodeArena</RouterLink>
       <p class="eyebrow">建立你的学习空间</p>
       <h1>先从适合你的节奏开始。</h1>
-      <p class="intro">这几项只用来安排你的首页与学习提醒，之后随时可以调整。</p>
+      <p class="intro">配置自己的模型 Key，再选择学习节奏。验证通过后即可开始刷题。</p>
+
+      <fieldset class="api-key-fieldset">
+        <legend>配置 DeepSeek API Key</legend>
+        <label class="api-key-field">
+          <span>API Key</span>
+          <input v-model="apiKey" type="password" autocomplete="off" :placeholder="hasApiKey ? '留空则继续使用已保存的 Key' : 'sk-…'" />
+        </label>
+        <p class="note">{{ keyHint }} Key 仅用于你的 Nex 请求，并按账号隔离保存。</p>
+      </fieldset>
 
       <fieldset>
         <legend>你现在最想学习什么？</legend>
@@ -111,7 +156,7 @@ async function complete() {
       </fieldset>
       <p v-if="error" class="error">{{ error }}</p>
       <button type="button" class="btn-primary complete" :disabled="busy" @click="complete">{{ busy ? "正在建立…" : "进入我的学习空间" }}</button>
-      <p class="note">AI 陪练可在需要时配置你自己的模型 Key；不影响基础学习与复习。</p>
+      <p class="note">进入前会验证 Key 是否可用，验证失败不会完成设置。</p>
     </section>
   </main>
 </template>
@@ -121,4 +166,8 @@ async function complete() {
 .onboarding-panel { width: min(760px, 100%); margin: 0 auto; padding: 36px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); box-shadow: var(--shadow); }
 .brand { color: var(--ink); text-decoration: none; font-weight: 700; letter-spacing: -.04em; }.eyebrow { margin: 32px 0 4px; color: var(--accent); font-size: 13px; font-weight: 650; }.onboarding-panel h1 { margin: 0; font-size: clamp(30px, 4vw, 42px); letter-spacing: -.05em; }.intro, .note { color: var(--muted); }.intro { margin: 10px 0 32px; }.note { margin: 12px 0 0; font-size: 13px; }
 fieldset { margin: 0 0 28px; padding: 0; border: 0; } legend { margin-bottom: 12px; font-size: 16px; font-weight: 650; }.choice-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }.choice-grid button, .time-options button { min-height: 72px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }.choice-grid button { padding: 14px; }.choice-grid strong, .choice-grid span { display: block; }.choice-grid span { margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.4; }.choice-grid button.selected, .time-options button.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }.time-options { display: flex; gap: 10px; }.time-options button { min-height: 44px; padding: 0 16px; text-align: center; }.extension-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -10px 0 28px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--soft); }.extension-card p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }.complete { width: 100%; }.error { color: var(--danger); font-size: 14px; } @media (max-width: 600px) { .onboarding-page { padding: 20px 16px; }.onboarding-panel { padding: 24px 18px; }.choice-grid { grid-template-columns: 1fr; }.time-options button { flex: 1; padding: 0 6px; }.extension-card { align-items: flex-start; flex-direction: column; } }
+.api-key-fieldset { padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--soft); }
+.api-key-field { display: block; font-size: 13px; font-weight: 600; }
+.api-key-field input { width: 100%; min-height: 44px; box-sizing: border-box; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+.api-key-field input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); border-color: var(--accent); }
 </style>

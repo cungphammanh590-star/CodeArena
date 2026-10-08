@@ -109,8 +109,8 @@ public class KnowledgeLlmRefiner {
             model = String.valueOf(secret.getOrDefault("coach_model", "deepseek-chat"));
             key = String.valueOf(secret.getOrDefault("api_key", ""));
             String base = String.valueOf(secret.getOrDefault("base_url", ""));
-            if ("ollama".equals(provider)) {
-                return callOllama(base, model, prompt);
+            if (!"api".equals(provider) || key.isBlank()) {
+                throw new IllegalStateException("personal API key required for refine");
             }
             if (base == null || base.isBlank()) {
                 base = "https://api.deepseek.com";
@@ -139,26 +139,6 @@ public class KnowledgeLlmRefiner {
         }
         JsonNode root = objectMapper.readTree(resp.body());
         return root.path("choices").path(0).path("message").path("content").asText("");
-    }
-
-    private String callOllama(String base, String model, String prompt) throws Exception {
-        String b = (base == null || base.isBlank()) ? "http://127.0.0.1:11434" : base.replaceAll("/$", "");
-        String body = objectMapper.writeValueAsString(Map.of(
-                "model", model,
-                "stream", false,
-                "messages", List.of(Map.of("role", "user", "content", prompt))));
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(b + "/api/chat"))
-                .timeout(Duration.ofSeconds(120))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        HttpResponse<String> resp =
-                HttpClient.newHttpClient().send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() >= 400) {
-            throw new IllegalStateException("ollama " + resp.statusCode());
-        }
-        return objectMapper.readTree(resp.body()).path("message").path("content").asText("");
     }
 
     private static String extractJson(String content) {

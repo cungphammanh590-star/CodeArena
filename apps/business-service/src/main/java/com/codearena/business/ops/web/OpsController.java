@@ -131,9 +131,7 @@ public class OpsController {
                     .body(Map.of("status", "error", "message", "confirm=true required"));
         }
         UserEntity user = currentUserService.require(request);
-        boolean switchOllama = body.get("switch_to_ollama") == null
-                || Boolean.TRUE.equals(body.get("switch_to_ollama"));
-        Map<String, Object> llm = llmSettingsService.clearKey(user, switchOllama);
+        Map<String, Object> llm = llmSettingsService.clearKey(user);
         Map<String, Object> cfg = new LinkedHashMap<>();
         cfg.put("llm", llm);
         return ResponseEntity.ok(Map.of(
@@ -144,7 +142,7 @@ public class OpsController {
                 "user_public_id",
                 user.getPublicId(),
                 "message",
-                "已清除 API Key" + (switchOllama ? "，并切回 Ollama" : ""),
+                "已清除 API Key",
                 "owner",
                 "business-service"));
     }

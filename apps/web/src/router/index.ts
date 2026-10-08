@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { getAccessToken } from "@/api/client";
+import api, { getAccessToken } from "@/api/client";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -66,10 +66,25 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
+  if (to.name === "login" && getAccessToken()) {
+    const redirect = typeof to.query.redirect === "string" ? to.query.redirect : "/dashboard";
+    return redirect === "/login" ? { name: "dashboard" } : redirect;
+  }
   if (to.meta.public) return true;
   if (!getAccessToken()) {
     return { name: "login", query: { redirect: to.fullPath } };
+  }
+  if (to.name !== "onboarding") {
+    try {
+      const { data } = await api.get("/onboarding");
+      if (!data?.completed) {
+        return { name: "onboarding", query: { redirect: to.path } };
+      }
+    } catch {
+      // 401 由响应拦截器统一跳登录；短暂服务故障不应制造 onboarding 循环。
+      return true;
+    }
   }
   return true;
 });

@@ -21,13 +21,13 @@ public class UserLlmSettingsEntity {
     private Long userId;
 
     @Column(nullable = false, length = 16)
-    private String provider = "ollama";
+    private String provider = "api";
 
     @Column(name = "api_provider", nullable = false, length = 32)
-    private String apiProvider = "";
+    private String apiProvider = "deepseek";
 
     @Column(name = "coach_model", nullable = false, length = 128)
-    private String coachModel = "";
+    private String coachModel = "deepseek-chat";
 
     @Column(name = "base_url", nullable = false, length = 512)
     private String baseUrl = "";
@@ -44,13 +44,13 @@ public class UserLlmSettingsEntity {
     void touch() {
         updatedAt = OffsetDateTime.now();
         if (provider == null || provider.isBlank()) {
-            provider = "ollama";
+            provider = "api";
         }
-        if (apiProvider == null) {
-            apiProvider = "";
+        if (apiProvider == null || apiProvider.isBlank()) {
+            apiProvider = "deepseek";
         }
-        if (coachModel == null) {
-            coachModel = "";
+        if (coachModel == null || coachModel.isBlank()) {
+            coachModel = "deepseek-chat";
         }
         if (baseUrl == null) {
             baseUrl = "";

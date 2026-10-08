@@ -23,12 +23,6 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
-  cloud:
-    nacos:
-      discovery:
-        enabled: false
-        register-enabled: false
-
 management:
   health:
     db:

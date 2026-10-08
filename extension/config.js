@@ -58,6 +58,18 @@ async function getConfig() {
   };
 }
 
+/** 打开 Web 时携带扩展当前会话，避免扩展与网页出现两套登录态。 */
+async function openAuthenticatedWeb(path = "/", params = {}) {
+  const cfg = await getConfig();
+  const base = (cfg.webBase || WEB_BASE).replace(/\/$/, "");
+  const url = new URL(path, `${base}/`);
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value != null && value !== "") url.searchParams.set(key, String(value));
+  }
+  if (cfg.accessToken) url.searchParams.set("ext_token", cfg.accessToken);
+  return chrome.tabs.create({ url: url.toString() });
+}
+
 async function saveConfig(partial) {
   const payload = {};
   if (partial.accessToken != null) payload[STORAGE_KEYS.accessToken] = partial.accessToken;

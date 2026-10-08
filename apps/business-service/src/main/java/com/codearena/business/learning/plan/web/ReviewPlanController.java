@@ -15,6 +15,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -94,6 +97,16 @@ public class ReviewPlanController {
         body.put("progress", learningPrefsService.computeListProgress(user.getId(), activeListId));
         body.put("learning", learning);
         return body;
+    }
+
+    @PostMapping("/api/review/problems/{problemId}/grade")
+    public Map<String, Object> gradeReview(
+            HttpServletRequest request,
+            @PathVariable Integer problemId,
+            @RequestBody(required = false) Map<String, Object> body) {
+        UserEntity user = currentUserService.require(request);
+        String grade = body == null || body.get("grade") == null ? "good" : String.valueOf(body.get("grade"));
+        return srsService.review(user.getId(), problemId, grade);
     }
 
     private static Integer toInt(Object value) {

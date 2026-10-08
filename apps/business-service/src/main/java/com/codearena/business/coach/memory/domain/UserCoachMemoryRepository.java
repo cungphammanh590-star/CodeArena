@@ -12,4 +12,7 @@ public interface UserCoachMemoryRepository extends JpaRepository<UserCoachMemory
             Long userId, String kind);
 
     Optional<UserCoachMemoryEntity> findByIdAndUserId(Long id, Long userId);
+
+    Optional<UserCoachMemoryEntity> findByUserIdAndKindAndMemoryKeyAndActiveTrue(
+            Long userId, String kind, String memoryKey);
 }

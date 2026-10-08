@@ -38,7 +38,8 @@ public class RecallMemoriesTool implements CoachTool {
         if (lim != null) {
             limit = lim;
         }
-        List<Map<String, Object>> items = memoryService.recall(context.userId(), kind, limit).stream()
+        List<Map<String, Object>> items = memoryService.recall(
+                        context.userId(), kind, context.problemId(), limit).stream()
                 .map(memoryService::toView)
                 .toList();
         Map<String, Object> data = new LinkedHashMap<>();

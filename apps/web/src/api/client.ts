@@ -2,6 +2,7 @@ import axios from "axios";
 
 const USER_PUBLIC_ID_KEY = "codearena_user_public_id";
 const ACCESS_TOKEN_KEY = "codearena_access_token";
+const USER_DISPLAY_NAME_KEY = "codearena_user_display_name";
 
 export function getUserPublicId(): string {
   try {
@@ -28,6 +29,32 @@ export function getAccessToken(): string {
   }
 }
 
+export function getUserDisplayName(): string {
+  try {
+    return localStorage.getItem(USER_DISPLAY_NAME_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setUserDisplayName(name: string) {
+  try {
+    if (name) localStorage.setItem(USER_DISPLAY_NAME_KEY, name);
+    else localStorage.removeItem(USER_DISPLAY_NAME_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function rememberUser(user?: Record<string, unknown> | null) {
+  if (!user) return;
+  if (typeof user.public_id === "string" && user.public_id) {
+    setUserPublicId(user.public_id);
+  }
+  const name = user.display_name || user.username || user.public_id;
+  if (typeof name === "string" && name) setUserDisplayName(name);
+}
+
 export function setAccessToken(token: string) {
   try {
     if (token) localStorage.setItem(ACCESS_TOKEN_KEY, token);
@@ -40,6 +67,7 @@ export function setAccessToken(token: string) {
 export function clearAuth() {
   setAccessToken("");
   setUserPublicId("");
+  setUserDisplayName("");
   notifyExtensionAuthClear();
 }
 
@@ -103,6 +131,12 @@ api.interceptors.response.use((resp) => {
     setUserPublicId(uid);
   }
   return resp;
+}, (error) => {
+  if (error?.response?.status === 401 && getAccessToken()) {
+    clearAuth();
+    window.dispatchEvent(new CustomEvent("codearena:auth-expired"));
+  }
+  return Promise.reject(error);
 });
 
 export async function loginWithPassword(username: string, password: string) {
@@ -114,7 +148,7 @@ export async function loginWithPassword(username: string, password: string) {
   const token = data.access_token as string;
   setAccessToken(token);
   const user = data.user || {};
-  if (user.public_id) setUserPublicId(user.public_id);
+  rememberUser(user);
   notifyExtensionAuth(token, user);
   return data;
 }
@@ -132,7 +166,7 @@ export async function registerWithPassword(
   const token = data.access_token as string;
   setAccessToken(token);
   const user = data.user || {};
-  if (user.public_id) setUserPublicId(user.public_id);
+  rememberUser(user);
   notifyExtensionAuth(token, user);
   return data;
 }
@@ -152,7 +186,7 @@ export async function logoutRemote() {
 export async function fetchMe() {
   const { data } = await api.get("/auth/me");
   const user = data?.user;
-  if (user?.public_id) setUserPublicId(user.public_id);
+  rememberUser(user);
   return data;
 }
 
@@ -175,11 +209,16 @@ export async function consumeExtensionTokenFromUrl(): Promise<boolean> {
 
     const { data } = await api.get("/auth/me");
     const user = data?.user;
-    if (user?.public_id) setUserPublicId(user.public_id);
+    rememberUser(user);
     notifyExtensionAuth(token, user || null);
     return true;
-  } catch {
-    clearAuth();
+  } catch (error: unknown) {
+    const status =
+      error && typeof error === "object" && "response" in error
+        ? (error as { response?: { status?: number } }).response?.status
+        : undefined;
+    // 只有服务端明确拒绝凭证时才清会话；网络或服务故障不能反向抹掉扩展登录态。
+    if (status === 401 || status === 403) clearAuth();
     return false;
   }
 }

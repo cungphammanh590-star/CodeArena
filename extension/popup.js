@@ -1,6 +1,5 @@
 "use strict";
 
-let webBase = WEB_BASE;
 let ready = false;
 let loggedIn = false;
 let coachHint = null;
@@ -129,9 +128,6 @@ async function refresh() {
   coachTitleEl.textContent = "检测当前题目…";
   coachSuggestionEl.textContent = "—";
 
-  const cfg = await getConfig();
-  webBase = cfg.webBase;
-
   try {
     const healthRes = await new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: "get_api_health" }, (res) => {
@@ -200,59 +196,48 @@ async function refresh() {
 
 dashboardBtn.addEventListener("click", async () => {
   if (!ready || !loggedIn) return;
-  await chrome.tabs.create({ url: `${webBase}/dashboard` });
+  await openAuthenticatedWeb("/dashboard");
 });
 
 coachBtn.addEventListener("click", async () => {
   if (!ready || !loggedIn || !coachHint) return;
-  let url = `${webBase}/coach`;
+  const params = {};
   if (coachHint.latest_submission_id) {
-    const params = new URLSearchParams({
-      submission: String(coachHint.latest_submission_id),
-      problem_id: String(coachHint.problem_id),
-    });
-    url += `?${params.toString()}`;
+    params.submission = String(coachHint.latest_submission_id);
+    params.problem_id = String(coachHint.problem_id);
   } else if (coachHint.problem_id) {
-    url += `?problem_id=${encodeURIComponent(String(coachHint.problem_id))}`;
+    params.problem_id = String(coachHint.problem_id);
   }
-  await chrome.tabs.create({ url });
+  await openAuthenticatedWeb("/coach", params);
 });
 
 problemBtn.addEventListener("click", async () => {
   if (!ready || !loggedIn || !coachHint?.problem_id) return;
-  await chrome.tabs.create({
-    url: `${webBase}/problems/${coachHint.problem_id}`,
-  });
+  await openAuthenticatedWeb(`/problems/${coachHint.problem_id}`);
 });
 
 dailyReviewBtn.addEventListener("click", async () => {
   if (!ready || !loggedIn) return;
-  await chrome.tabs.create({
-    url: `${webBase}/coach?mode=daily_review&action=daily_review`,
-  });
+  await openAuthenticatedWeb("/coach", { mode: "daily_review", action: "daily_review" });
 });
 
 reviewQueueBtn.addEventListener("click", async () => {
   if (!ready || !loggedIn) return;
-  await chrome.tabs.create({
-    url: `${webBase}/coach?mode=review&action=review`,
-  });
+  await openAuthenticatedWeb("/coach", { mode: "review", action: "review" });
 });
 
 recommendBtn.addEventListener("click", async () => {
   if (!ready || !loggedIn) return;
-  await chrome.tabs.create({
-    url: `${webBase}/coach?mode=recommend&action=recommend`,
-  });
+  await openAuthenticatedWeb("/coach", { mode: "recommend", action: "recommend" });
 });
 
-document.getElementById("open-options").addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
+document.getElementById("open-login").addEventListener("click", () => {
+  void openAuthenticatedWeb("/login");
 });
 
 document.getElementById("refresh").addEventListener("click", refresh);
 
-// 选项页登录/退出后立刻刷新弹窗状态
+// 网页登录/退出同步到扩展后立刻刷新弹窗状态
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.accessToken || changes.userDisplay || changes.userPublicId) {

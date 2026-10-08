@@ -25,6 +25,7 @@ business:
   service:
     type: ClusterIP
     port: 8090
+    grpcPort: 9092
   resources: {}
 
 llm:
@@ -37,8 +38,13 @@ llm:
   service:
     type: ClusterIP
     port: 8091
+    grpcPort: 9093
   env:
     LLM_PROVIDER: mock
+    SANDBOX_BACKEND: subprocess
+    SANDBOX_TIMEOUT_S: "10"
+    SANDBOX_MEMORY_MB: "256"
+    SANDBOX_MAX_RUNS_PER_MINUTE: "10"
   resources: {}
 
 web:

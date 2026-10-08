@@ -66,10 +66,7 @@ public class UserLlmController {
     public Map<String, Object> clearKey(
             HttpServletRequest request, @RequestBody(required = false) Map<String, Object> body) {
         UserEntity user = currentUserService.require(request);
-        boolean switchToOllama = body == null
-                || body.get("switch_to_ollama") == null
-                || Boolean.TRUE.equals(body.get("switch_to_ollama"));
-        Map<String, Object> llm = llmSettingsService.clearKey(user, switchToOllama);
+        Map<String, Object> llm = llmSettingsService.clearKey(user);
         Map<String, Object> cfg = new LinkedHashMap<>();
         cfg.put("llm", llm);
         Map<String, Object> resp = new LinkedHashMap<>();
